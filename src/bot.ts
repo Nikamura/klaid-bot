@@ -1,12 +1,13 @@
 import { Bot } from "grammy";
+import { downloadVideosFromMessage } from "./download-video";
+import { BotContext } from "./types/bot-context";
 import { config } from "./utils/config";
 import { logger as globalLogger } from "./utils/logger";
-import { BotContext } from "./types/bot-context";
-import { downloadVideosFromMessage } from "./download-video";
 
 const apiRoot = config.get("KLAID_TELEGRAM_API_ROOT");
 
 export const bot = new Bot<BotContext>(
+  // biome-ignore lint/style/noNonNullAssertion: <explanation>
   config.get("KLAID_TELEGRAM_BOT_TOKEN")!,
   apiRoot
     ? {
@@ -14,7 +15,7 @@ export const bot = new Bot<BotContext>(
           apiRoot,
         },
       }
-    : {}
+    : {},
 );
 
 bot.use(async (ctx, next) => {
@@ -49,6 +50,6 @@ bot.on("message", async (ctx) => {
     logger,
     ctx,
     isPrivateChat ? undefined : config.get("KLAID_AUTO_DL_URLS"),
-    isPrivateChat ? false : config.get("KLAID_AUTO_DL_DELETE_MESSAGE")
+    isPrivateChat ? false : config.get("KLAID_AUTO_DL_DELETE_MESSAGE"),
   );
 });

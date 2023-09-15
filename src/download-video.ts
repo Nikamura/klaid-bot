@@ -1,11 +1,11 @@
+import { unlinkSync } from "fs";
 import { ChildProcess, exec } from "node:child_process";
+import { InputFile, InputMediaBuilder } from "grammy";
+import { Message } from "grammy/types";
+import { discoverUrls } from "./discover-urls";
+import { BotContext } from "./types/bot-context";
 import { config } from "./utils/config";
 import { logger as globalLogger } from "./utils/logger";
-import { unlinkSync } from "fs";
-import { InputMediaBuilder, InputFile } from "grammy";
-import { Message } from "grammy/types";
-import { BotContext } from "./types/bot-context";
-import { discoverUrls } from "./discover-urls";
 
 export class VideoDownloadError extends Error {
   constructor(public videoUrl: string, message: string | null) {
@@ -19,7 +19,7 @@ export async function dowloadVideo(fileName: string, videoUrl: string): Promise<
   const command = `yt-dlp --recode-video mp4 -o "${downloadDir}/${fileName}.%(ext)s" ${videoUrl}`;
 
   const process = await new Promise<ChildProcess>((resolve, reject) => {
-    const childProcess = exec(command, (error, _stdout, _stderr) => {
+    const childProcess = exec(command, (error) => {
       if (error) {
         reject(new VideoDownloadError(videoUrl, error.message));
         return;
@@ -41,7 +41,7 @@ export async function downloadVideos(logger: typeof globalLogger, urls: string[]
       logger.debug("Downloading video", { url });
       const videoPath = await dowloadVideo(`${Date.now()}-${index}`, url);
       return videoPath;
-    })
+    }),
   );
 }
 export async function downloadVideosFromMessage(
@@ -50,7 +50,7 @@ export async function downloadVideosFromMessage(
   logger: typeof globalLogger,
   ctx: BotContext,
   whitelist: undefined | string[],
-  autoDeleteMessage: boolean
+  autoDeleteMessage: boolean,
 ) {
   const user =
     `@${message.from?.username}` ?? `${[message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ")}`;
@@ -92,7 +92,7 @@ export async function downloadVideosFromMessage(
       {
         reply_to_message_id: message.message_id,
         allow_sending_without_reply: true,
-      }
+      },
     );
 
     // Delete downloaded videos

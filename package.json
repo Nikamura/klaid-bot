@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "start": "tsx watch -r dotenv/config src/index.ts",
-    "build": "tsc --noEmit && shx rm -rf dist && ncc build --out dist --source-map src/index.ts"
+    "build": "tsc --noEmit && shx rm -rf dist && ncc build --out dist --source-map src/index.ts",
+    "format": "biome format src/ --write && biome check src/ --apply-unsafe",
+    "lint": "biome check src/ && biome format src/",
+    "start": "tsx watch -r dotenv/config src/index.ts"
   },
   "dependencies": {
     "convict": "6.2.4",
@@ -14,6 +16,7 @@
     "winston": "3.10.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "1.2.1",
     "@tsconfig/node18": "18.2.2",
     "@tsconfig/strictest": "2.0.2",
     "@types/convict": "6.1.4",

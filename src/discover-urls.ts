@@ -1,5 +1,5 @@
-import { logger as globalLogger } from "./utils/logger";
 import getUrls from "get-urls";
+import { logger as globalLogger } from "./utils/logger";
 
 export function discoverUrls(
   logger: typeof globalLogger,
@@ -7,7 +7,7 @@ export function discoverUrls(
   /**
    * If undefined, all URLs will be downloaded.
    */
-  whitelist: undefined | string[]
+  whitelist: undefined | string[],
 ): string[] {
   logger.debug("Received download command", { text });
   if (whitelist !== undefined && whitelist.length === 0) return [];
