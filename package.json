@@ -7,6 +7,7 @@
     "build": "tsc --noEmit && shx rm -rf dist && ncc build --out dist --source-map src/index.ts",
     "format": "biome format src/ --write && biome check src/ --apply-unsafe",
     "lint": "biome check src/ && biome format src/",
+    "preinstall": "npx only-allow yarn",
     "start": "tsx watch -r dotenv/config src/index.ts"
   },
   "dependencies": {
