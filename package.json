@@ -1,0 +1,27 @@
+{
+  "name": "klaid-bot",
+  "type": "module",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "tsx watch -r dotenv/config src/index.ts",
+    "build": "tsc --noEmit && shx rm -rf dist && ncc build --out dist --source-map src/index.ts"
+  },
+  "dependencies": {
+    "convict": "6.2.4",
+    "get-urls": "12.1.0",
+    "grammy": "1.18.1",
+    "winston": "3.10.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node18": "18.2.2",
+    "@tsconfig/strictest": "2.0.2",
+    "@types/convict": "6.1.4",
+    "@types/node": "18.11.15",
+    "@vercel/ncc": "0.38.0",
+    "dotenv": "16.3.1",
+    "shx": "0.3.4",
+    "tsx": "3.12.10",
+    "typescript": "5.2.2"
+  }
+}
