@@ -41,7 +41,7 @@ export async function downloadVideos(logger: typeof globalLogger, urls: string[]
       logger.debug("Downloading video", { url });
       const videoPath = await dowloadVideo(`${Date.now()}-${index}`, url);
       return videoPath;
-    })
+    }),
   );
 }
 export async function downloadVideosFromMessage(
@@ -50,7 +50,7 @@ export async function downloadVideosFromMessage(
   logger: typeof globalLogger,
   ctx: BotContext,
   whitelist: undefined | string[],
-  autoDeleteMessage: boolean
+  autoDeleteMessage: boolean,
 ) {
   const username = message.from?.username;
   const firstLastName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ");
@@ -93,7 +93,7 @@ export async function downloadVideosFromMessage(
       {
         reply_to_message_id: message.message_id,
         allow_sending_without_reply: true,
-      }
+      },
     );
 
     // Delete downloaded videos
