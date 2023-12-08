@@ -26,7 +26,7 @@ export const config = convict({
     format: String,
   },
   KLAID_AUTO_DL_URLS: {
-    default: ["tiktok.com"],
+    default: ["tiktok.com", "youtube.com/shorts/"],
     doc: "The urls to download automatically.",
     env: "KLAID_AUTO_DL_URLS",
     format: Array,
