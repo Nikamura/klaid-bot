@@ -59,6 +59,8 @@ export async function downloadVideosFromMessage(
   const urls = discoverUrls(logger, text, whitelist);
   if (!urls.length) return;
 
+  logger.debug("Received message", { urls, user, chat: message.chat })
+
   let authorsMessageDeleted = false;
   if (autoDeleteMessage) {
     await ctx
@@ -101,4 +103,6 @@ export async function downloadVideosFromMessage(
       unlinkSync(download);
     }
   }
+
+  logger.debug("Finished downloading videos", { urls, user, chat: message.chat });
 }
