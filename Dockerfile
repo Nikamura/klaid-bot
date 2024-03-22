@@ -20,10 +20,7 @@ RUN apt-get install -y bash git make vim wget g++ && \
     git clone https://github.com/ggerganov/whisper.cpp.git -b v1.5.4 --depth 1 &&  \
     cd whisper.cpp && \
     bash ./models/download-ggml-model.sh medium && \
-    make && \
-    make quantize && \
-    ./quantize models/ggml-medium.bin models/ggml-medium-q5_0.bin q5_0 && \
-    rm models/ggml-medium.bin
+    make
 
 WORKDIR /usr/src/app
 

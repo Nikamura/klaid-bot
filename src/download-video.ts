@@ -55,7 +55,7 @@ function extractAudioAsWav(file: string): Promise<string> {
 
 function transcribeWavFile(wavFile: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const command = `./main -m models/ggml-medium-q5_0.bin --no-timestamps --language auto -f ${wavFile}`;
+    const command = `./main -m models/ggml-medium.bin --no-timestamps --language auto -f ${wavFile}`;
     const cwd = join(process.cwd(), "whisper.cpp/");
     exec(command, { cwd }, (error, stdout) => {
       if (error) {
