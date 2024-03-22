@@ -39,7 +39,7 @@ export async function dowloadVideo(fileName: string, videoUrl: string): Promise<
   throw new VideoDownloadError(videoUrl, null);
 }
 
-function extractAudioAsWav(file: string): Promise<string> {
+export function extractAudioAsWav(file: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const command = `ffmpeg -i ${file} -vn -acodec pcm_s16le -ar 16000 -ac 1 ${file}.wav`;
 
@@ -53,7 +53,7 @@ function extractAudioAsWav(file: string): Promise<string> {
   });
 }
 
-function transcribeWavFile(wavFile: string): Promise<string> {
+export function transcribeWavFile(wavFile: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const command = `./main -m models/ggml-medium.bin --no-timestamps --language auto -f ${wavFile}`;
     const cwd = join(process.cwd(), "whisper.cpp/");
@@ -76,10 +76,10 @@ export async function downloadVideos(
     urls.map(async (url, index) => {
       logger.debug("Downloading video", { url });
       const videoPath = await dowloadVideo(`${Date.now()}-${index}`, url);
-      const wavPath = await extractAudioAsWav(videoPath);
-      const transcription = await transcribeWavFile(wavPath);
-      unlinkSync(wavPath);
-      return { videoPath, transcription };
+      // const wavPath = await extractAudioAsWav(videoPath);
+      // const transcription = await transcribeWavFile(wavPath);
+      // unlinkSync(wavPath);
+      return { videoPath, transcription: "" };
     }),
   );
 }
