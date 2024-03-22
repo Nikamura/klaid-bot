@@ -14,6 +14,17 @@ RUN apt-get update && \
     chmod a+rx /usr/local/bin/ffplay && \
     chmod a+rx /usr/local/bin/ffprobe
 
+WORKDIR /usr/src/whisper
+
+RUN apt-get install -y bash git make vim wget g++ && \
+    git clone https://github.com/ggerganov/whisper.cpp.git -b v1.5.4 --depth 1 &&  \
+    cd whisper.cpp && \
+    bash ./models/download-ggml-model.sh medium && \
+    make && \
+    make quantize && \
+    ./quantize models/ggml-medium.bin models/ggml-medium-q5_0.bin q5_0 && \
+    rm models/ggml-medium.bin
+
 WORKDIR /usr/src/app
 
 FROM base AS build
@@ -26,9 +37,9 @@ COPY . .
 
 RUN yarn lint && yarn build
 
-
 FROM base as production
 
 COPY --from=build /usr/src/app/dist ./
+COPY --from=build /usr/src/whisper ./whisper.cpp/
 
 CMD [ "node", "index.js" ]

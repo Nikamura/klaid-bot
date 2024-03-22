@@ -1,6 +1,6 @@
 import { Bot } from "grammy";
 import { downloadVideosFromMessage } from "./download-video";
-import { BotContext } from "./types/bot-context";
+import type { BotContext } from "./types/bot-context";
 import { config } from "./utils/config";
 import { logger as globalLogger } from "./utils/logger";
 

@@ -1,5 +1,5 @@
 import getUrls from "get-urls";
-import { logger as globalLogger } from "./utils/logger";
+import type { logger as globalLogger } from "./utils/logger";
 
 export function discoverUrls(
   logger: typeof globalLogger,
