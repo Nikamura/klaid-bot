@@ -16,7 +16,6 @@ RUN apt-get update && \
 
 WORKDIR /usr/src/app
 
-
 FROM base AS build
 
 COPY package.json yarn.lock ./

@@ -13,19 +13,19 @@
   "dependencies": {
     "convict": "6.2.4",
     "get-urls": "12.1.0",
-    "grammy": "1.18.1",
-    "winston": "3.10.0"
+    "grammy": "1.21.1",
+    "winston": "3.12.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.2.1",
+    "@biomejs/biome": "1.6.2",
     "@tsconfig/node18": "18.2.2",
-    "@tsconfig/strictest": "2.0.2",
-    "@types/convict": "6.1.4",
-    "@types/node": "18.11.15",
-    "@vercel/ncc": "0.38.0",
-    "dotenv": "16.3.1",
+    "@tsconfig/strictest": "2.0.3",
+    "@types/convict": "6.1.6",
+    "@types/node": "18.19.26",
+    "@vercel/ncc": "0.38.1",
+    "dotenv": "16.4.5",
     "shx": "0.3.4",
-    "tsx": "3.12.10",
-    "typescript": "5.2.2"
+    "tsx": "3.14.0",
+    "typescript": "5.4.3"
   }
 }
