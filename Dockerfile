@@ -1,4 +1,4 @@
-FROM node:20.11.1-bullseye-slim AS base
+FROM node:20.13.1-bullseye-slim AS base
 
 ENV DEBIAN_FRONTEND="noninteractive" \
     LANGUAGE="en_US.UTF-8" \
