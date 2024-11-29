@@ -14,29 +14,27 @@ RUN apt-get update && \
     chmod a+rx /usr/local/bin/ffplay && \
     chmod a+rx /usr/local/bin/ffprobe
 
-# WORKDIR /usr/src/whisper
-
-# RUN apt-get install -y bash git make vim wget g++ && \
-#     git clone https://github.com/ggerganov/whisper.cpp.git -b v1.5.4 --depth 1 &&  \
-#     cd whisper.cpp && \
-#     bash ./models/download-ggml-model.sh medium && \
-#     make
-
 WORKDIR /usr/src/app
 
 FROM base AS build
 
-COPY package.json yarn.lock ./
+ENV PNPM_HOME="/pnpm"
 
-RUN yarn install
+ENV PATH="$PNPM_HOME:$PATH"
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml ./
+
+
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-RUN yarn lint && yarn build
+RUN pnpm run lint && pnpm run build
 
-FROM base as production
+FROM base AS production
 
 COPY --from=build /usr/src/app/dist ./
-# COPY --from=build /usr/src/whisper ./whisper.cpp/
 
 CMD [ "node", "index.js" ]

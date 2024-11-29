@@ -1,8 +1,8 @@
 import { Bot } from "grammy";
-import { downloadVideosFromMessage } from "./download-video";
-import type { BotContext } from "./types/bot-context";
-import { config } from "./utils/config";
-import { logger as globalLogger } from "./utils/logger";
+import { downloadVideosFromMessage } from "./download-video.js";
+import type { BotContext } from "./types/bot-context.js";
+import { config } from "./utils/config.js";
+import { logger as globalLogger } from "./utils/logger.js";
 
 const apiRoot = config.get("KLAID_TELEGRAM_API_ROOT");
 

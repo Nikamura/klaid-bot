@@ -1,5 +1,5 @@
 import winston from "winston";
-import { config } from "./config";
+import { config } from "./config.js";
 
 export const logger = winston.createLogger({
   level: config.get("KLAID_LOG_LEVEL"),

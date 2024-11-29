@@ -3,10 +3,10 @@ import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
-import { discoverUrls } from "./discover-urls";
-import type { BotContext } from "./types/bot-context";
-import { config } from "./utils/config";
-import type { logger as globalLogger } from "./utils/logger";
+import { discoverUrls } from "./discover-urls.js";
+import type { BotContext } from "./types/bot-context.js";
+import { config } from "./utils/config.js";
+import type { logger as globalLogger } from "./utils/logger.js";
 
 export class VideoDownloadError extends Error {
   constructor(

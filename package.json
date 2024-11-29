@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && shx rm -rf dist && ncc build --out dist --source-map src/index.ts",
     "format": "biome format src/ --write && biome check src/ --apply-unsafe",
     "lint": "biome check src/ && biome format src/",
-    "preinstall": "npx only-allow yarn",
+    "preinstall": "npx only-allow pnpm",
     "start": "tsx watch -r dotenv/config src/index.ts"
   },
   "dependencies": {
@@ -18,8 +18,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.6.2",
-    "@tsconfig/node18": "18.2.2",
-    "@tsconfig/strictest": "2.0.3",
+    "@tsconfig/node22": "22.0.0",
     "@types/convict": "6.1.6",
     "@types/node": "18.19.26",
     "@vercel/ncc": "0.38.1",
@@ -27,5 +26,6 @@
     "shx": "0.3.4",
     "tsx": "3.14.0",
     "typescript": "5.4.3"
-  }
+  },
+  "packageManager": "pnpm@9.14.2+sha512.6e2baf77d06b9362294152c851c4f278ede37ab1eba3a55fda317a4a17b209f4dbb973fb250a77abc463a341fcb1f17f17cfa24091c4eb319cda0d9b84278387"
 }

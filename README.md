@@ -29,7 +29,7 @@ Telegram bot written in Node.js for downloading short videos from internet and s
 1. Install dependencies:
 
    ```bash
-   yarn install
+   pnpm install
    ```
 
 1. Set up your environment variables (refer to **.env.example** for required keys).
@@ -37,7 +37,7 @@ Telegram bot written in Node.js for downloading short videos from internet and s
 1. Start the bot:
 
    ```bash
-   yarn start
+   pnpm run start
    ```
 
 ## Usage 🚀

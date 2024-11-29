@@ -1,5 +1,5 @@
-import { bot } from "./bot";
-import { logger } from "./utils/logger";
+import { bot } from "./bot.js";
+import { logger } from "./utils/logger.js";
 
 await bot.start({
   onStart: (botInfo) => {
