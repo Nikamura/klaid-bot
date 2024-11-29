@@ -1,7 +1,7 @@
 {
   "name": "klaid-bot",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "scripts": {
     "build": "tsc --noEmit && shx rm -rf dist && ncc build --out dist --source-map src/index.ts",
