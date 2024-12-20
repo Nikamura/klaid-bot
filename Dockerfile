@@ -1,4 +1,4 @@
-FROM node:lts-bullseye-slim AS base
+FROM node:lts-bullseye-slim
 
 ENV DEBIAN_FRONTEND="noninteractive" \
     LANGUAGE="en_US.UTF-8" \
@@ -16,8 +16,6 @@ RUN apt-get update && \
 
 WORKDIR /usr/src/app
 
-FROM base AS build
-
 ENV PNPM_HOME="/pnpm"
 
 ENV PATH="$PNPM_HOME:$PATH"
@@ -26,15 +24,10 @@ RUN corepack enable
 
 COPY package.json pnpm-lock.yaml ./
 
-
 RUN pnpm install --frozen-lockfile
 
 COPY . .
 
 RUN pnpm run lint && pnpm run build
 
-FROM base AS production
-
-COPY --from=build /usr/src/app/dist ./
-
-CMD [ "node", "index.js" ]
+CMD [ "node", "dist/index.js" ]

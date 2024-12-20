@@ -1,7 +1,9 @@
 {
-"extends": "@tsconfig/node22/tsconfig.json",
+  "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
+    "rootDir": "src",
+    "inlineSourceMap": true
   },
   "include": ["src"]
 }
