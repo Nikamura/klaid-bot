@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      convict:
-        specifier: 6.2.4
-        version: 6.2.4
       get-urls:
         specifier: 12.1.0
         version: 12.1.0
@@ -27,18 +24,12 @@ importers:
       '@tsconfig/node22':
         specifier: 22.0.0
         version: 22.0.0
-      '@types/convict':
-        specifier: 6.1.6
-        version: 6.1.6
       '@types/node':
         specifier: 18.19.26
         version: 18.19.26
       '@vercel/ncc':
         specifier: 0.38.1
         version: 0.38.1
-      dotenv:
-        specifier: 16.4.5
-        version: 16.4.5
       shx:
         specifier: 0.3.4
         version: 0.3.4
@@ -249,9 +240,6 @@ packages:
   '@tsconfig/node22@22.0.0':
     resolution: {integrity: sha512-twLQ77zevtxobBOD4ToAtVmuYrpeYUh3qh+TEp+08IWhpsrIflVHqQ1F1CiPxQGL7doCdBIOOCF+1Tm833faNg==}
 
-  '@types/convict@6.1.6':
-    resolution: {integrity: sha512-1B6jqWHWQud+7yyWAqbxnPmzlHrrOtJzZr1DhhYJ/NbpS4irfZSnq+N5Fm76J9LNRlUZvCmYxTVhhohWRvtqHw==}
-
   '@types/node@18.19.26':
     resolution: {integrity: sha512-+wiMJsIwLOYCvUqSdKTrfkS8mpTp+MPINe6+Np4TAGFWWRWiBQ5kSq9nZGCSPkzx9mvT+uEukzpX4MOSCydcvw==}
 
@@ -307,10 +295,6 @@ packages:
     resolution: {integrity: sha512-lOETlkIeYSJWcbbcvjRKGxVMXJR+8+OQb/mTPbA4ObPMytYIsUbuOE0Jzy60hjARYszq1id0j8KgVhC+WGZVTg==}
     engines: {node: '>=12'}
 
-  convict@6.2.4:
-    resolution: {integrity: sha512-qN60BAwdMVdofckX7AlohVJ2x9UvjTNoKVXCL2LxFk1l7757EJqf1nySdMkPQer0bt8kQ5lQiyZ9/2NvrFBuwQ==}
-    engines: {node: '>=6'}
-
   debug@4.3.7:
     resolution: {integrity: sha512-Er2nc/H7RrMXZBFCEim6TCmMk02Z8vLC2Rbi1KEBggpo0fS6l0S1nnapwmIi3yW/+GOJap1Krg4w0Hg80oCqgQ==}
     engines: {node: '>=6.0'}
@@ -319,10 +303,6 @@ packages:
     peerDependenciesMeta:
       supports-color:
         optional: true
-
-  dotenv@16.4.5:
-    resolution: {integrity: sha512-ZmdL2rui+eB2YwhsWzjInR8LldtZHGDoQ1ugH85ppHKwpUHL7j7rN0Ti9NCnGiQbhaZ11FpR+7ao1dNsmduNUg==}
-    engines: {node: '>=12'}
 
   enabled@2.0.0:
     resolution: {integrity: sha512-AKrN98kuwOzMIdAizXGI86UFBoo26CL21UM763y1h/GMSJ4/OHU9k2YlsmBpyScFo/wbLzWQJBMCW4+IO3/+OQ==}
@@ -408,9 +388,6 @@ packages:
 
   kuler@2.0.0:
     resolution: {integrity: sha512-Xq9nH7KlWZmXAtodXDDRE7vs6DU1gTU8zYDHDiWLSip45Egwq3plLHzPn27NgvzL2r1LMPC1vdqh98sQxtqj4A==}
-
-  lodash.clonedeep@4.5.0:
-    resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
 
   logform@2.7.0:
     resolution: {integrity: sha512-TFYA4jnP7PVbmlBIfhlSe+WKxs9dklXMTEGcBCIvLhE/Tn3H6Gk1norupVW7m5Cnd4bLcr08AytbyV/xj7f/kQ==}
@@ -566,10 +543,6 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  yargs-parser@20.2.9:
-    resolution: {integrity: sha512-y11nGElTIV+CT3Zv9t7VKl+Q3hTQoT9a1Qzezhhl6Rp21gJ/IVTW7Z3y9EWXhuUBC2Shnf+DX0antecpAwSP8w==}
-    engines: {node: '>=10'}
-
 snapshots:
 
   '@biomejs/biome@1.6.2':
@@ -685,10 +658,6 @@ snapshots:
 
   '@tsconfig/node22@22.0.0': {}
 
-  '@types/convict@6.1.6':
-    dependencies:
-      '@types/node': 18.19.26
-
   '@types/node@18.19.26':
     dependencies:
       undici-types: 5.26.5
@@ -743,16 +712,9 @@ snapshots:
 
   convert-hrtime@5.0.0: {}
 
-  convict@6.2.4:
-    dependencies:
-      lodash.clonedeep: 4.5.0
-      yargs-parser: 20.2.9
-
   debug@4.3.7:
     dependencies:
       ms: 2.1.3
-
-  dotenv@16.4.5: {}
 
   enabled@2.0.0: {}
 
@@ -853,8 +815,6 @@ snapshots:
   is-stream@2.0.1: {}
 
   kuler@2.0.0: {}
-
-  lodash.clonedeep@4.5.0: {}
 
   logform@2.7.0:
     dependencies:
@@ -1008,5 +968,3 @@ snapshots:
       winston-transport: 4.9.0
 
   wrappy@1.0.2: {}
-
-  yargs-parser@20.2.9: {}

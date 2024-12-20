@@ -19,7 +19,7 @@ export class VideoDownloadError extends Error {
 }
 
 export async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
-  const downloadDir = config.get("KLAID_DOWNLOAD_DIR");
+  const downloadDir = config.KLAID_DOWNLOAD_DIR;
   const command = `yt-dlp --recode-video mp4 -o "${downloadDir}/${fileName}.%(ext)s" ${videoUrl}`;
 
   const process = await new Promise<ChildProcess>((resolve, reject) => {

@@ -4,11 +4,10 @@ import type { BotContext } from "./types/bot-context.js";
 import { config } from "./utils/config.js";
 import { logger as globalLogger } from "./utils/logger.js";
 
-const apiRoot = config.get("KLAID_TELEGRAM_API_ROOT");
+const apiRoot = config.KLAID_TELEGRAM_API_ROOT;
 
 export const bot = new Bot<BotContext>(
-  // biome-ignore lint/style/noNonNullAssertion: <explanation>
-  config.get("KLAID_TELEGRAM_BOT_TOKEN")!,
+  config.KLAID_TELEGRAM_BOT_TOKEN,
   apiRoot
     ? {
         client: {
@@ -49,7 +48,7 @@ bot.on("message", async (ctx) => {
     text,
     logger,
     ctx,
-    isPrivateChat ? undefined : config.get("KLAID_AUTO_DL_URLS"),
-    isPrivateChat ? false : config.get("KLAID_AUTO_DL_DELETE_MESSAGE"),
+    isPrivateChat ? undefined : config.KLAID_AUTO_DL_URLS,
+    isPrivateChat ? false : config.KLAID_AUTO_DL_DELETE_MESSAGE,
   );
 });
