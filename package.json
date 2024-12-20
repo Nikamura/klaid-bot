@@ -4,7 +4,7 @@
   "version": "1.0.1",
   "license": "MIT",
   "scripts": {
-    "build": "shx rm -rf dist && tsc",
+    "build": "rm -rf dist/ && tsc",
     "format": "biome format src/ --write && biome check src/ --apply-unsafe",
     "lint": "biome check src/ && biome format src/",
     "preinstall": "npx only-allow pnpm",
@@ -19,7 +19,6 @@
     "@biomejs/biome": "1.6.2",
     "@tsconfig/node22": "22.0.0",
     "@types/node": "18.19.26",
-    "shx": "0.3.4",
     "tsx": "3.14.0",
     "typescript": "5.4.3"
   },
