@@ -1,6 +1,5 @@
 import { type ChildProcess, exec } from "node:child_process";
 import { unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { discoverUrls } from "./discover-urls.js";
@@ -18,7 +17,7 @@ export class VideoDownloadError extends Error {
   }
 }
 
-export async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
+async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
   const downloadDir = config.KLAID_DOWNLOAD_DIR;
   const command = `yt-dlp --recode-video mp4 -o "${downloadDir}/${fileName}.%(ext)s" ${videoUrl}`;
 
@@ -39,50 +38,16 @@ export async function dowloadVideo(fileName: string, videoUrl: string): Promise<
   throw new VideoDownloadError(videoUrl, null);
 }
 
-export function extractAudioAsWav(file: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const command = `ffmpeg -i ${file} -vn -acodec pcm_s16le -ar 16000 -ac 1 ${file}.wav`;
-
-    exec(command, (error) => {
-      if (error) {
-        reject(new Error(`Failed to extract audio from video: ${error.message}`));
-        return;
-      }
-      resolve(`${file}.wav`);
-    });
-  });
-}
-
-export function transcribeWavFile(wavFile: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const command = `./main -m models/ggml-medium.bin --no-timestamps --language auto -f ${wavFile}`;
-    const cwd = join(process.cwd(), "whisper.cpp/");
-    exec(command, { cwd }, (error, stdout) => {
-      if (error) {
-        reject(new Error(`Failed to transcribe audio: ${error.message}`));
-        return;
-      }
-      console.log({ stdout, command, cwd });
-      resolve(stdout);
-    });
-  });
-}
-
-export async function downloadVideos(
-  logger: typeof globalLogger,
-  urls: string[],
-): Promise<{ videoPath: string; transcription: string }[]> {
+async function downloadVideos(logger: typeof globalLogger, urls: string[]): Promise<{ videoPath: string }[]> {
   return await Promise.all(
     urls.map(async (url, index) => {
       logger.debug("Downloading video", { url });
       const videoPath = await dowloadVideo(`${Date.now()}-${index}`, url);
-      // const wavPath = await extractAudioAsWav(videoPath);
-      // const transcription = await transcribeWavFile(wavPath);
-      // unlinkSync(wavPath);
-      return { videoPath, transcription: "" };
+      return { videoPath };
     }),
   );
 }
+
 export async function downloadVideosFromMessage(
   message: Message,
   text: string,
@@ -128,18 +93,27 @@ export async function downloadVideosFromMessage(
   });
 
   if (downloads.length) {
-    await ctx.replyWithMediaGroup(
-      downloads.map((download) =>
-        InputMediaBuilder.video(
-          new InputFile(download.videoPath),
-          caption ? { caption: `${caption}\n\n${download.transcription}` } : { caption: `${download.transcription}` },
+    try {
+      await ctx.replyWithMediaGroup(
+        downloads.map((download) =>
+          InputMediaBuilder.video(new InputFile(download.videoPath), { caption: caption ?? undefined }),
         ),
-      ),
-      {
-        reply_to_message_id: message.message_id,
-        allow_sending_without_reply: true,
-      },
-    );
+        {
+          reply_to_message_id: message.message_id,
+          allow_sending_without_reply: true,
+        },
+      );
+    } catch (err) {
+      logger.error("Error sending media group", err);
+      if (err instanceof Error) {
+        await ctx.reply([caption, `Error sending video:\n\n${err.message}`].filter(Boolean).join("\n\n---\n\n"), {
+          disable_web_page_preview: true,
+          disable_notification: true,
+          reply_to_message_id: message.message_id,
+          allow_sending_without_reply: true,
+        });
+      }
+    }
 
     // Delete downloaded videos
     for (const download of downloads) {

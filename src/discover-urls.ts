@@ -18,6 +18,7 @@ export function discoverUrls(
     logger.debug("No urls found");
     return [];
   }
-  logger.debug("Found URLs", { urls });
-  return urls;
+  const uniqueUrls = [...new Set(urls)];
+  logger.debug("Found URLs", { uniqueUrls });
+  return uniqueUrls;
 }
