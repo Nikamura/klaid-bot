@@ -6,3 +6,4 @@ dist/
 whisper.cpp/
 
 .DS_Store
+coverage/

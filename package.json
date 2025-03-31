@@ -8,7 +8,8 @@
     "format": "biome format src/ --write && biome check src/ --apply-unsafe",
     "lint": "biome check src/ && biome format src/",
     "preinstall": "npx only-allow pnpm",
-    "start": "tsx watch --env-file=.env src/index.ts"
+    "start": "tsx watch --env-file=.env src/index.ts",
+    "test": "c8 --all --reporter=text --reporter=html tsx src/**/*.test.ts"
   },
   "dependencies": {
     "get-urls": "12.1.0",
@@ -19,6 +20,7 @@
     "@biomejs/biome": "1.6.2",
     "@tsconfig/node22": "22.0.0",
     "@types/node": "18.19.26",
+    "c8": "9.1.0",
     "tsx": "3.14.0",
     "typescript": "5.4.3"
   },
