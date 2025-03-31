@@ -1,4 +1,4 @@
-import winston from "winston";
+import type winston from "winston";
 
 /**
  * Mock logger that can be used in tests
@@ -10,6 +10,6 @@ export const createMockLogger = (): ReturnType<typeof winston.createLogger> => {
     info: () => {},
     warn: () => {},
     error: () => {},
-    log: () => {}
+    log: () => {},
   } as unknown as ReturnType<typeof winston.createLogger>;
-}; 
+};

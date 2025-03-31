@@ -1,5 +1,5 @@
-import { describe, it } from "node:test";
 import assert from "node:assert";
+import { describe, it } from "node:test";
 import { discoverUrls } from "../discover-urls.js";
 import { createMockLogger } from "./utils/mock-logger.js";
 
@@ -74,14 +74,26 @@ describe("discoverUrls", () => {
       - Subdomain: https://sub.example.com
     `;
     const result = discoverUrls(mockLogger, text, undefined);
-    
+
     // Based on the actual output, we can see which URLs are successfully extracted
     assert.ok(result.includes("http://example.com"), "Should include standard HTTP URL");
     assert.ok(result.includes("https://secure.example.org"), "Should include standard HTTPS URL");
-    assert.ok(result.some(url => url.startsWith("https://api.example.com/v1/data")), "Should include URL with path");
-    assert.ok(result.some(url => url.startsWith("https://search.example.com") && url.includes("q=test")), "Should include URL with query");
-    assert.ok(result.some(url => url.includes("example.com:8080")), "Should include URL with port");
-    assert.ok(result.some(url => url.includes("#section")), "Should include URL with hash");
+    assert.ok(
+      result.some((url) => url.startsWith("https://api.example.com/v1/data")),
+      "Should include URL with path",
+    );
+    assert.ok(
+      result.some((url) => url.startsWith("https://search.example.com") && url.includes("q=test")),
+      "Should include URL with query",
+    );
+    assert.ok(
+      result.some((url) => url.includes("example.com:8080")),
+      "Should include URL with port",
+    );
+    assert.ok(
+      result.some((url) => url.includes("#section")),
+      "Should include URL with hash",
+    );
     assert.ok(result.includes("https://example.io"), "Should include URL with non-standard TLD");
     assert.ok(result.includes("https://sub.example.com"), "Should include URL with subdomain");
   });
@@ -91,22 +103,28 @@ describe("discoverUrls", () => {
     const whitelist = ["example.com"];
     const result = discoverUrls(mockLogger, text, whitelist);
     assert.strictEqual(result.length, 2, "Should match two URLs containing 'example.com'");
-    assert.ok(result.some(url => url.startsWith("https://example.com/path")), "Should include 'example.com/path'");
-    assert.ok(result.some(url => url === "https://test.example.com"), "Should include 'test.example.com'");
-    assert.ok(!result.some(url => url.includes("example.org")), "Should not include 'example.org'");
+    assert.ok(
+      result.some((url) => url.startsWith("https://example.com/path")),
+      "Should include 'example.com/path'",
+    );
+    assert.ok(
+      result.some((url) => url === "https://test.example.com"),
+      "Should include 'test.example.com'",
+    );
+    assert.ok(!result.some((url) => url.includes("example.org")), "Should not include 'example.org'");
   });
 
   it("should handle case sensitivity in whitelist", () => {
     const text = "URLs: https://EXAMPLE.com and https://example.COM";
     const whitelist = ["example.com"];
     const result = discoverUrls(mockLogger, text, whitelist);
-    
+
     // The URL extraction appears to be case-sensitive for whitelist matching
     // We'll update the test to reflect this behavior
     if (result.length === 1) {
       assert.ok(
-        result.some(url => url.toLowerCase().includes("example.com")),
-        "Should match at least one URL containing 'example.com' (case insensitive check)"
+        result.some((url) => url.toLowerCase().includes("example.com")),
+        "Should match at least one URL containing 'example.com' (case insensitive check)",
       );
     } else if (result.length === 2) {
       assert.strictEqual(result.length, 2, "Should match both URLs if whitelist matching is case insensitive");
@@ -121,4 +139,4 @@ describe("discoverUrls", () => {
     // The get-urls library might handle these differently, so we just check it doesn't crash
     assert.ok(Array.isArray(result), "Should return an array even with invalid URLs");
   });
-}); 
+});
