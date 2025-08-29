@@ -1,4 +1,4 @@
-FROM node:23.10.0-bullseye-slim
+FROM node:22.19.0-bullseye-slim
 
 ENV DEBIAN_FRONTEND="noninteractive" \
     LANGUAGE="en_US.UTF-8" \
