@@ -1,4 +1,4 @@
-FROM node:24.11.0-trixie-slim
+FROM --platform=linux/amd64 node:24.11.0-trixie-slim
 
 ENV DEBIAN_FRONTEND="noninteractive" \
     LANGUAGE="en_US.UTF-8" \
@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND="noninteractive" \
 
 RUN apt-get update && \
     apt-get --no-install-recommends install -y curl ca-certificates binutils xz-utils python3 python3-pip && \
-    python3 -m pip install -U "yt-dlp[default,curl-cffi]" --break-system-packages &&\
+    python3 -m pip install -U "yt-dlp[default,curl-cffi]" --break-system-packages && \
     curl -Ls https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar Jx -C /usr/local/bin --transform='s:.*/::' --wildcards '*/ffmpeg' '*/ffplay' '*/ffprobe' && \
     chmod a+rx /usr/local/bin/ffmpeg && \
     chmod a+rx /usr/local/bin/ffplay && \
@@ -16,7 +16,7 @@ RUN apt-get update && \
 
 WORKDIR /usr/src/app
 
-ENV PNPM_HOME="/pnpm"aot
+ENV PNPM_HOME="/pnpm"
 
 ENV PATH="/usr/local/bin:$PNPM_HOME:$PATH"
 

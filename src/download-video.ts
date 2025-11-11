@@ -19,7 +19,7 @@ export class VideoDownloadError extends Error {
 
 async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
   const downloadDir = config.KLAID_DOWNLOAD_DIR;
-  const command = `yt-dlp --recode-video mp4 -o "${downloadDir}/${fileName}.%(ext)s" ${videoUrl}`;
+  const command = `yt-dlp -t mp4 --embed-subs --embed-thumbnail --embed-metadata -o "${downloadDir}/${fileName}.%(ext)s" --max-filesize 50M ${videoUrl}`;
 
   const process = await new Promise<ChildProcess>((resolve, reject) => {
     const childProcess = exec(command, (error) => {
@@ -96,7 +96,9 @@ export async function downloadVideosFromMessage(
     try {
       await ctx.replyWithMediaGroup(
         downloads.map((download) =>
-          InputMediaBuilder.video(new InputFile(download.videoPath), { caption: caption ?? undefined }),
+          InputMediaBuilder.video(new InputFile(download.videoPath), {
+            caption: caption ?? undefined,
+          }),
         ),
         {
           reply_to_message_id: message.message_id,
@@ -121,5 +123,9 @@ export async function downloadVideosFromMessage(
     }
   }
 
-  logger.debug("Finished downloading videos", { urls, user, chat: message.chat });
+  logger.debug("Finished downloading videos", {
+    urls,
+    user,
+    chat: message.chat,
+  });
 }
