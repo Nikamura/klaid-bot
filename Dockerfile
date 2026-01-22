@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 node:24.11.0-trixie-slim
+FROM --platform=linux/amd64 node:24.13.0-trixie-slim
 
 ENV DEBIAN_FRONTEND="noninteractive" \
     LANGUAGE="en_US.UTF-8" \
