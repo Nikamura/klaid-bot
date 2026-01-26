@@ -19,7 +19,7 @@ export class VideoDownloadError extends Error {
 
 async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
   const downloadDir = config.KLAID_DOWNLOAD_DIR;
-  const command = `yt-dlp -t mp4 --embed-subs --embed-thumbnail --embed-metadata -o "${downloadDir}/${fileName}.%(ext)s" --max-filesize 50M ${videoUrl}`;
+  const command = `yt-dlp --impersonate chrome --merge-output-format mp4 --embed-subs --embed-thumbnail --embed-metadata -o "${downloadDir}/${fileName}.%(ext)s" --max-filesize 50M ${videoUrl}`;
 
   const process = await new Promise<ChildProcess>((resolve, reject) => {
     const childProcess = exec(command, (error) => {
