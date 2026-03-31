@@ -9,7 +9,7 @@
     "lint": "biome check src/ && biome format src/",
     "preinstall": "npx only-allow pnpm",
     "start": "tsx watch --env-file=.env src/index.ts",
-    "test": "c8 --all --reporter=text --reporter=html tsx src/**/*.test.ts"
+    "test": "c8 --all --reporter=text --reporter=html tsx --test src/__tests__/*.test.ts"
   },
   "dependencies": {
     "get-urls": "12.1.0",

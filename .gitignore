@@ -7,3 +7,6 @@ whisper.cpp/
 
 .DS_Store
 coverage/
+skills-lock.json
+.claude/
+.agents/

@@ -1,4 +1,4 @@
-import { type ChildProcess, exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { unlinkSync } from "node:fs";
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
@@ -19,26 +19,73 @@ export class VideoDownloadError extends Error {
 
 async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
   const downloadDir = config.KLAID_DOWNLOAD_DIR;
-  const command = `yt-dlp --impersonate chrome --merge-output-format mp4 --embed-subs --embed-thumbnail --embed-metadata -o "${downloadDir}/${fileName}.%(ext)s" --max-filesize 50M ${videoUrl}`;
 
-  const process = await new Promise<ChildProcess>((resolve, reject) => {
-    const childProcess = exec(command, (error) => {
-      if (error) {
-        reject(new VideoDownloadError(videoUrl, error.message));
-        return;
-      }
-      resolve(childProcess);
-    });
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      "yt-dlp",
+      [
+        "--impersonate",
+        "chrome",
+        "--merge-output-format",
+        "mp4",
+        "--embed-subs",
+        "--embed-thumbnail",
+        "--embed-metadata",
+        "-o",
+        `${downloadDir}/${fileName}.%(ext)s`,
+        "--max-filesize",
+        "50M",
+        videoUrl,
+      ],
+      (error) => {
+        if (error) {
+          reject(new VideoDownloadError(videoUrl, error.message));
+          return;
+        }
+        resolve();
+      },
+    );
   });
 
-  if (process.exitCode === 0) {
-    return `${downloadDir}/${fileName}.mp4`;
-  }
-
-  throw new VideoDownloadError(videoUrl, null);
+  return `${downloadDir}/${fileName}.mp4`;
 }
 
-async function downloadVideos(logger: typeof globalLogger, urls: string[]): Promise<{ videoPath: string }[]> {
+export interface VideoMeta {
+  title: string;
+  thumbnail: string | null;
+  duration: number | null;
+  uploader: string | null;
+}
+
+export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Promise<VideoMeta> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      "yt-dlp",
+      ["--impersonate", "chrome", "--dump-json", "--no-download", videoUrl],
+      { maxBuffer: 1024 * 1024, timeout: timeoutMs },
+      (error, stdout) => {
+        if (error) {
+          reject(new VideoDownloadError(videoUrl, error.message));
+          return;
+        }
+        try {
+          const data = JSON.parse(stdout);
+          resolve({
+            title: data.title || data.fulltitle || "Video",
+            thumbnail: data.thumbnail || null,
+            duration: data.duration ? Math.round(data.duration) : null,
+            uploader: data.uploader || data.channel || null,
+          });
+        } catch {
+          resolve({ title: "Video", thumbnail: null, duration: null, uploader: null });
+        }
+      },
+    );
+    child.stdin?.end();
+  });
+}
+
+export async function downloadVideos(logger: typeof globalLogger, urls: string[]): Promise<{ videoPath: string }[]> {
   return await Promise.all(
     urls.map(async (url, index) => {
       logger.debug("Downloading video", { url });
