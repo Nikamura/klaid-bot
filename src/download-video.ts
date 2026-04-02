@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, rmSync, unlinkSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, unlinkSync } from "node:fs";
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { discoverUrls } from "./discover-urls.js";
@@ -18,6 +18,86 @@ export class VideoDownloadError extends Error {
   }
 }
 
+function findSubtitleFile(downloadDir: string, fileName: string): string | null {
+  let files: string[];
+  try {
+    files = readdirSync(downloadDir);
+  } catch {
+    return null;
+  }
+  const srtMatches = files.filter((f) => f.startsWith(`${fileName}.`) && /\.en[^.]*\.srt$/.test(f));
+  if (srtMatches.length > 0) {
+    const exact = srtMatches.find((f) => f === `${fileName}.en.srt`);
+    return `${downloadDir}/${exact ?? srtMatches.sort()[0]}`;
+  }
+  // Fallback to .vtt in case --convert-subs failed
+  const vttMatches = files.filter((f) => f.startsWith(`${fileName}.`) && /\.en[^.]*\.vtt$/.test(f));
+  if (vttMatches.length > 0) {
+    return `${downloadDir}/${vttMatches.sort()[0]}`;
+  }
+  return null;
+}
+
+function cleanupSubtitleFiles(downloadDir: string, fileName: string): void {
+  try {
+    const files = readdirSync(downloadDir);
+    for (const f of files) {
+      if (f.startsWith(`${fileName}.`) && /\.(srt|vtt|ass)$/.test(f)) {
+        try {
+          unlinkSync(`${downloadDir}/${f}`);
+        } catch {
+          // best-effort
+        }
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+function escapeSubtitlePath(filePath: string): string {
+  return filePath.replace(/([:\\[\]'])/g, "\\$1");
+}
+
+async function burnSubtitles(videoPath: string, subtitlePath: string): Promise<string> {
+  const outputPath = videoPath.replace(/\.mp4$/, ".subs.mp4");
+  const escapedSubPath = escapeSubtitlePath(subtitlePath);
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      "ffmpeg",
+      [
+        "-i",
+        videoPath,
+        "-vf",
+        `subtitles=${escapedSubPath}:force_style='FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1'`,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-c:a",
+        "copy",
+        "-movflags",
+        "+faststart",
+        "-y",
+        outputPath,
+      ],
+      { timeout: 120_000 },
+      (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      },
+    );
+  });
+
+  return outputPath;
+}
+
 async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
   const downloadDir = config.KLAID_DOWNLOAD_DIR;
 
@@ -29,7 +109,12 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
         "chrome",
         "--merge-output-format",
         "mp4",
-        "--embed-subs",
+        "--write-subs",
+        "--write-auto-subs",
+        "--sub-lang",
+        "en",
+        "--convert-subs",
+        "srt",
         "--embed-thumbnail",
         "--embed-metadata",
         "-o",
@@ -48,7 +133,29 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
     );
   });
 
-  return `${downloadDir}/${fileName}.mp4`;
+  const videoPath = `${downloadDir}/${fileName}.mp4`;
+  const subtitlePath = findSubtitleFile(downloadDir, fileName);
+
+  if (!subtitlePath) {
+    cleanupSubtitleFiles(downloadDir, fileName);
+    return videoPath;
+  }
+
+  try {
+    const burnedVideoPath = await burnSubtitles(videoPath, subtitlePath);
+    unlinkSync(videoPath);
+    cleanupSubtitleFiles(downloadDir, fileName);
+    return burnedVideoPath;
+  } catch {
+    // ffmpeg failed — fall back to video without subs
+    try {
+      unlinkSync(videoPath.replace(/\.mp4$/, ".subs.mp4"));
+    } catch {
+      // may not exist
+    }
+    cleanupSubtitleFiles(downloadDir, fileName);
+    return videoPath;
+  }
 }
 
 export interface VideoMeta {
