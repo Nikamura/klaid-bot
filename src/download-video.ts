@@ -107,6 +107,8 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
       [
         "--impersonate",
         "chrome",
+        "-f",
+        "bv*[height<=1080][filesize<50M]+ba/bv*[height<=720]+ba/bv*[height<=480]+ba/b",
         "--merge-output-format",
         "mp4",
         "--write-subs",
