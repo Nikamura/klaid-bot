@@ -1,6 +1,6 @@
-# Klaid - YT-DLP Telegram Bot 🎥🤖
+# Klaid - Media Download Telegram Bot 🎥🤖
 
-Telegram bot written in Node.js for downloading short videos from internet and serving them as native videos in Telegram. Ensures privacy as users do not need to visit websites to download content.
+Telegram bot written in Node.js for downloading videos and image galleries from the internet and serving them as native media in Telegram. Uses yt-dlp for videos and gallery-dl for image galleries. Ensures privacy as users do not need to visit websites to download content.
 
 ![klaid logo](klaid.png)
 
@@ -9,8 +9,10 @@ Telegram bot written in Node.js for downloading short videos from internet and s
 - Supports Telegram groups. (**/dl [URL]** command)
 - Original message deletion.
 - Converts videos to MP4 automatically.
+- Image gallery downloads (Instagram carousels, Reddit galleries, etc.) via gallery-dl.
+- Automatic detection — tries video first, falls back to gallery.
 - Whitelisting domains for automatic downloading in groups.
-- Multiple videos download from single message.
+- Multiple media downloads from single message.
 
 ## Installation 🛠️
 
@@ -43,14 +45,14 @@ Telegram bot written in Node.js for downloading short videos from internet and s
 ## Usage 🚀
 
 1. Start chat with Telegram bot.
-1. Send bot a video link.
-1. Receive the MP4 video!
+1. Send bot a video or gallery link.
+1. Receive the media!
 
 or
 
 1. Add Telegram bot to your group chat.
 1. Send a command **/dl** (or **/download**) [URL] [URL] or a message with whitelisted domains.
-1. Receive the MP4 video!
+1. Receive the video or gallery!
 1. **optional** Make Bot user an _admin_ in your group chat for request message cleanup.
 
 ## Contributing 🤝

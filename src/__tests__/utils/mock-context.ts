@@ -19,6 +19,7 @@ export interface MockContextResult {
   mocks: {
     reply: ReturnType<typeof createMockFn>;
     replyWithMediaGroup: ReturnType<typeof createMockFn>;
+    replyWithPhoto: ReturnType<typeof createMockFn>;
     deleteMessage: ReturnType<typeof createMockFn>;
   };
 }
@@ -47,6 +48,7 @@ export function createMockContext(options: MockContextOptions = {}): MockContext
   const mockLogger = createMockLogger();
   const replyMock = createMockFn<Message>();
   const replyWithMediaGroupMock = createMockFn<Message[]>();
+  const replyWithPhotoMock = createMockFn<Message>();
   const deleteMessageMock = createMockFn<boolean>();
 
   const message: Message = {
@@ -73,6 +75,7 @@ export function createMockContext(options: MockContextOptions = {}): MockContext
     isPrivateChat: chatType === "private",
     reply: replyMock.fn,
     replyWithMediaGroup: replyWithMediaGroupMock.fn,
+    replyWithPhoto: replyWithPhotoMock.fn,
     deleteMessage: deleteMessageMock.fn,
   } as unknown as BotContext;
 
@@ -81,6 +84,7 @@ export function createMockContext(options: MockContextOptions = {}): MockContext
     mocks: {
       reply: replyMock,
       replyWithMediaGroup: replyWithMediaGroupMock,
+      replyWithPhoto: replyWithPhotoMock,
       deleteMessage: deleteMessageMock,
     },
   };
