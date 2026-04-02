@@ -89,6 +89,7 @@ export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Prom
 export interface VideoDownload {
   type: "video";
   videoPath: string;
+  meta: VideoMeta | null;
 }
 
 export interface GalleryDownload {
@@ -104,8 +105,8 @@ export async function downloadMedia(logger: typeof globalLogger, url: string, in
 
   try {
     logger.debug("Trying video download", { url });
-    const videoPath = await dowloadVideo(fileName, url);
-    return { type: "video", videoPath };
+    const [videoPath, meta] = await Promise.all([dowloadVideo(fileName, url), fetchVideoMeta(url).catch(() => null)]);
+    return { type: "video", videoPath, meta };
   } catch (videoErr) {
     if (!(videoErr instanceof VideoDownloadError)) throw videoErr;
 
@@ -138,6 +139,20 @@ export async function downloadVideos(logger: typeof globalLogger, urls: string[]
       return { videoPath };
     }),
   );
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function formatMeta(meta: VideoMeta): string {
+  const parts = [
+    meta.title,
+    [meta.uploader, meta.duration ? formatDuration(meta.duration) : null].filter(Boolean).join(" \u2022 "),
+  ];
+  return parts.filter(Boolean).join("\n");
 }
 
 async function downloadAllMedia(logger: typeof globalLogger, urls: string[]): Promise<MediaDownload[]> {
@@ -195,11 +210,13 @@ export async function downloadMediaFromMessage(
     try {
       if (videos.length) {
         await ctx.replyWithMediaGroup(
-          videos.map((download) =>
-            InputMediaBuilder.video(new InputFile(download.videoPath), {
-              caption: caption ?? undefined,
-            }),
-          ),
+          videos.map((download, i) => {
+            const parts = [i === 0 ? caption : null, download.meta ? formatMeta(download.meta) : null];
+            const videoCaption = parts.filter(Boolean).join("\n\n") || undefined;
+            return InputMediaBuilder.video(new InputFile(download.videoPath), {
+              caption: videoCaption,
+            });
+          }),
           {
             reply_to_message_id: message.message_id,
             allow_sending_without_reply: true,
