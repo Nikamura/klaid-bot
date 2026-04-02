@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { unlinkSync } from "node:fs";
+import { rmSync, unlinkSync } from "node:fs";
 import { InlineKeyboard, InputFile, InputMediaBuilder } from "grammy";
 import { discoverUrls } from "./discover-urls.js";
-import { type VideoMeta, downloadVideos, fetchVideoMeta } from "./download-video.js";
+import { type MediaDownload, type VideoMeta, downloadMedia, fetchVideoMeta } from "./download-video.js";
 import type { BotContext } from "./types/bot-context.js";
 
 function formatDuration(seconds: number): string {
@@ -44,7 +44,7 @@ export async function handleInlineQuery(ctx: BotContext) {
         description: url,
         thumbnail_url: "https://img.icons8.com/color/480/video.png",
         input_message_content: {
-          message_text: `\u23F3 Downloading video...\n<a href="${url}">${url}</a>`,
+          message_text: `\u23F3 Downloading media...\n<a href="${url}">${url}</a>`,
           parse_mode: "HTML" as const,
         },
         reply_markup: new InlineKeyboard().text("\u23F3 Downloading...", "noop"),
@@ -52,6 +52,18 @@ export async function handleInlineQuery(ctx: BotContext) {
     ],
     { cache_time: 0 },
   );
+}
+
+function cleanupDownload(download: MediaDownload) {
+  if (download.type === "video") {
+    try {
+      unlinkSync(download.videoPath);
+    } catch {
+      // File may not exist if download failed
+    }
+  } else {
+    rmSync(download.galleryDir, { recursive: true, force: true });
+  }
 }
 
 export async function handleChosenInlineResult(ctx: BotContext) {
@@ -71,66 +83,79 @@ export async function handleChosenInlineResult(ctx: BotContext) {
   if (!urls.length) return;
 
   const url = urls[0];
-  let downloads: { videoPath: string }[] = [];
+  let download: MediaDownload | null = null;
 
   try {
-    // Fetch metadata and download video in parallel
+    // Fetch metadata and download media in parallel
     const metaPromise = fetchVideoMeta(url).catch((err) => {
       ctx.logger.debug("Failed to fetch metadata", err);
       return null;
     });
-    const downloadPromise = downloadVideos(ctx.logger, [url]);
+    const downloadPromise = downloadMedia(ctx.logger, url, 0);
 
     // Update message with metadata as soon as it arrives
     metaPromise.then(async (meta) => {
       if (!meta) return;
       try {
-        await ctx.api.editMessageTextInline(inlineMessageId, `\u23F3 Downloading video...\n${formatMeta(meta, url)}`, {
+        await ctx.api.editMessageTextInline(inlineMessageId, `\u23F3 Downloading media...\n${formatMeta(meta, url)}`, {
           parse_mode: "HTML",
           reply_markup: new InlineKeyboard().text("\u23F3 Downloading...", "noop"),
         });
       } catch {
-        // Edit may fail if video already replaced the message
+        // Edit may fail if media already replaced the message
       }
     });
 
-    downloads = await downloadPromise;
+    download = await downloadPromise;
 
-    if (!downloads.length) {
-      await ctx.api.editMessageTextInline(inlineMessageId, `\u274C No video found\n<a href="${url}">${url}</a>`, {
-        parse_mode: "HTML",
+    const userId = chosenResult.from.id;
+    const meta = await metaPromise;
+
+    if (download.type === "video") {
+      const tempMessage = await ctx.api.sendVideo(userId, new InputFile(download.videoPath));
+      const fileId = tempMessage.video?.file_id;
+
+      if (!fileId) {
+        await ctx.api.editMessageTextInline(
+          inlineMessageId,
+          `\u274C Failed to process video\n<a href="${url}">${url}</a>`,
+          { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
+        );
+        return;
+      }
+
+      const caption = meta ? formatMeta(meta, url) : `<a href="${url}">Source</a>`;
+      const media = InputMediaBuilder.video(fileId, { caption, parse_mode: "HTML" });
+      await ctx.api.editMessageMediaInline(inlineMessageId, media, {
         reply_markup: { inline_keyboard: [] },
       });
-      return;
+
+      await ctx.api.deleteMessage(userId, tempMessage.message_id).catch(() => {});
+    } else {
+      // Gallery: send first photo to get file_id, then edit inline message
+      const firstPhoto = download.filePaths[0];
+      const tempMessage = await ctx.api.sendPhoto(userId, new InputFile(firstPhoto));
+      const fileId = tempMessage.photo?.[tempMessage.photo.length - 1]?.file_id;
+
+      if (!fileId) {
+        await ctx.api.editMessageTextInline(
+          inlineMessageId,
+          `\u274C Failed to process gallery\n<a href="${url}">${url}</a>`,
+          { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
+        );
+        return;
+      }
+
+      const caption = `<a href="${url}">Source</a> (${download.filePaths.length} image${
+        download.filePaths.length > 1 ? "s" : ""
+      })`;
+      const media = InputMediaBuilder.photo(fileId, { caption, parse_mode: "HTML" });
+      await ctx.api.editMessageMediaInline(inlineMessageId, media, {
+        reply_markup: { inline_keyboard: [] },
+      });
+
+      await ctx.api.deleteMessage(userId, tempMessage.message_id).catch(() => {});
     }
-
-    const videoPath = downloads[0].videoPath;
-    const userId = chosenResult.from.id;
-
-    const tempMessage = await ctx.api.sendVideo(userId, new InputFile(videoPath));
-    const fileId = tempMessage.video?.file_id;
-
-    if (!fileId) {
-      await ctx.api.editMessageTextInline(
-        inlineMessageId,
-        `\u274C Failed to process video\n<a href="${url}">${url}</a>`,
-        { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
-      );
-      return;
-    }
-
-    const meta = await metaPromise;
-    const caption = meta ? formatMeta(meta, url) : `<a href="${url}">Source</a>`;
-
-    const media = InputMediaBuilder.video(fileId, {
-      caption,
-      parse_mode: "HTML",
-    });
-    await ctx.api.editMessageMediaInline(inlineMessageId, media, {
-      reply_markup: { inline_keyboard: [] },
-    });
-
-    await ctx.api.deleteMessage(userId, tempMessage.message_id).catch(() => {});
   } catch (err) {
     ctx.logger.error("Inline download failed", err);
     const errorMsg = err instanceof Error ? err.message : "Unknown error";
@@ -144,12 +169,8 @@ export async function handleChosenInlineResult(ctx: BotContext) {
       // Edit may fail if message was deleted
     }
   } finally {
-    for (const download of downloads) {
-      try {
-        unlinkSync(download.videoPath);
-      } catch {
-        // File may not exist if download failed
-      }
+    if (download) {
+      cleanupDownload(download);
     }
   }
 }

@@ -86,20 +86,20 @@ export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Prom
   });
 }
 
-interface VideoDownload {
+export interface VideoDownload {
   type: "video";
   videoPath: string;
 }
 
-interface GalleryDownload {
+export interface GalleryDownload {
   type: "gallery";
   filePaths: string[];
   galleryDir: string;
 }
 
-type MediaDownload = VideoDownload | GalleryDownload;
+export type MediaDownload = VideoDownload | GalleryDownload;
 
-async function downloadMedia(logger: typeof globalLogger, url: string, index: number): Promise<MediaDownload> {
+export async function downloadMedia(logger: typeof globalLogger, url: string, index: number): Promise<MediaDownload> {
   const fileName = `${Date.now()}-${index}`;
 
   try {
