@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, readdirSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from "node:fs";
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { discoverUrls } from "./discover-urls.js";
@@ -134,6 +134,27 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
   });
 
   const videoPath = `${downloadDir}/${fileName}.mp4`;
+
+  if (!existsSync(videoPath)) {
+    // yt-dlp exited successfully but no .mp4 produced (e.g. --max-filesize rejected the video track)
+    // Clean up any partial files
+    try {
+      const files = readdirSync(downloadDir);
+      for (const f of files) {
+        if (f.startsWith(`${fileName}.`)) {
+          try {
+            unlinkSync(`${downloadDir}/${f}`);
+          } catch {
+            // best-effort
+          }
+        }
+      }
+    } catch {
+      // best-effort
+    }
+    throw new VideoDownloadError(videoUrl, "Video file too large or unavailable");
+  }
+
   const subtitlePath = findSubtitleFile(downloadDir, fileName);
 
   if (!subtitlePath) {
