@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { downloadVideosFromMessage } from "./download-video.js";
+import { downloadMediaFromMessage } from "./download-video.js";
 import { handleChosenInlineResult, handleInlineQuery } from "./handle-inline-query.js";
 import type { BotContext } from "./types/bot-context.js";
 import { config } from "./utils/config.js";
@@ -40,7 +40,7 @@ bot.command(["dl", "download"], async (ctx) => {
     return;
   }
 
-  await downloadVideosFromMessage(message, text, logger, ctx, undefined, isPrivateChat ? false : true);
+  await downloadMediaFromMessage(message, text, logger, ctx, undefined, isPrivateChat ? false : true);
 });
 
 bot.on("message", async (ctx) => {
@@ -51,7 +51,7 @@ bot.on("message", async (ctx) => {
   // Skip messages sent via this bot (e.g. inline query results)
   if (message.via_bot?.id === ctx.me.id) return;
 
-  await downloadVideosFromMessage(
+  await downloadMediaFromMessage(
     message,
     text,
     logger,
