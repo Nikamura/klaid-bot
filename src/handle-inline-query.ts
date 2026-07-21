@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rmSync, unlinkSync } from "node:fs";
 import { InlineKeyboard, InputFile, InputMediaBuilder } from "grammy";
 import { discoverUrls } from "./discover-urls.js";
-import { type MediaDownload, type VideoMeta, downloadMedia, fetchVideoMeta } from "./download-video.js";
+import { downloadMedia, fetchVideoMeta, type MediaDownload, type VideoMeta } from "./download-video.js";
 import type { BotContext } from "./types/bot-context.js";
 
 function formatDuration(seconds: number): string {

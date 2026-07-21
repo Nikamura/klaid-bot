@@ -40,7 +40,7 @@ bot.command(["dl", "download"], async (ctx) => {
     return;
   }
 
-  await downloadMediaFromMessage(message, text, logger, ctx, undefined, isPrivateChat ? false : true);
+  await downloadMediaFromMessage(message, text, logger, ctx, undefined, !isPrivateChat);
 });
 
 bot.on("message", async (ctx) => {

@@ -65,7 +65,7 @@ describe("bot", () => {
       ];
 
       for (const { isPrivateChat, expectedAutoDelete } of testCases) {
-        const autoDeleteMessage = isPrivateChat ? false : true;
+        const autoDeleteMessage = !isPrivateChat;
         assert.strictEqual(
           autoDeleteMessage,
           expectedAutoDelete,

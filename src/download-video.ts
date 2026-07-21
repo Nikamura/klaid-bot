@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from "node:fs"
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { discoverUrls } from "./discover-urls.js";
-import { GalleryDownloadError, downloadGallery } from "./download-gallery.js";
+import { downloadGallery, GalleryDownloadError } from "./download-gallery.js";
 import type { BotContext } from "./types/bot-context.js";
 import { config } from "./utils/config.js";
 import type { logger as globalLogger } from "./utils/logger.js";
@@ -323,10 +323,12 @@ export async function downloadMediaFromMessage(
   const downloads: MediaDownload[] = await downloadAllMedia(logger, urls).catch(async (err) => {
     if (err instanceof VideoDownloadError) {
       await ctx.reply([caption, `Error downloading media:\n\n${err.message}`].filter(Boolean).join("\n\n---\n\n"), {
-        disable_web_page_preview: true,
+        link_preview_options: { is_disabled: true },
         disable_notification: true,
-        reply_to_message_id: message.message_id,
-        allow_sending_without_reply: true,
+        reply_parameters: {
+          message_id: message.message_id,
+          allow_sending_without_reply: true,
+        },
       });
       return [];
     }
@@ -348,8 +350,10 @@ export async function downloadMediaFromMessage(
             });
           }),
           {
-            reply_to_message_id: message.message_id,
-            allow_sending_without_reply: true,
+            reply_parameters: {
+              message_id: message.message_id,
+              allow_sending_without_reply: true,
+            },
           },
         );
       }
@@ -359,19 +363,23 @@ export async function downloadMediaFromMessage(
         if (gallery.filePaths.length === 1) {
           await ctx.replyWithPhoto(new InputFile(gallery.filePaths[0]), {
             caption: galleryCaption ?? undefined,
-            reply_to_message_id: message.message_id,
-            allow_sending_without_reply: true,
+            reply_parameters: {
+              message_id: message.message_id,
+              allow_sending_without_reply: true,
+            },
           });
         } else {
           await ctx.replyWithMediaGroup(
             gallery.filePaths.map((filePath, i) =>
               InputMediaBuilder.photo(new InputFile(filePath), {
-                caption: i === 0 ? galleryCaption ?? undefined : undefined,
+                caption: i === 0 ? (galleryCaption ?? undefined) : undefined,
               }),
             ),
             {
-              reply_to_message_id: message.message_id,
-              allow_sending_without_reply: true,
+              reply_parameters: {
+                message_id: message.message_id,
+                allow_sending_without_reply: true,
+              },
             },
           );
         }
@@ -380,10 +388,12 @@ export async function downloadMediaFromMessage(
       logger.error("Error sending media group", err);
       if (err instanceof Error) {
         await ctx.reply([caption, `Error sending media:\n\n${err.message}`].filter(Boolean).join("\n\n---\n\n"), {
-          disable_web_page_preview: true,
+          link_preview_options: { is_disabled: true },
           disable_notification: true,
-          reply_to_message_id: message.message_id,
-          allow_sending_without_reply: true,
+          reply_parameters: {
+            message_id: message.message_id,
+            allow_sending_without_reply: true,
+          },
         });
       }
     }
