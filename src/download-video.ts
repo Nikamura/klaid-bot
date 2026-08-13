@@ -8,14 +8,34 @@ import type { BotContext } from "./types/bot-context.js";
 import { config } from "./utils/config.js";
 import type { logger as globalLogger } from "./utils/logger.js";
 
+const DEFAULT_DOWNLOAD_ERROR_MESSAGE =
+  "The source site rejected the download request, or the media is private or unavailable. Please try again later.";
+
 export class VideoDownloadError extends Error {
   constructor(
     public videoUrl: string,
     message: string | null,
+    public userMessage = DEFAULT_DOWNLOAD_ERROR_MESSAGE,
   ) {
     super(message ?? "Failed to download video");
     this.name = "VideoDownloadError";
   }
+}
+
+export function buildYtDlpRequestArgs(videoUrl: string): string[] {
+  try {
+    const hostname = new URL(videoUrl).hostname.toLowerCase();
+    const isTikTok = ["tiktok.com", "tiktokv.com"].some(
+      (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+    );
+    if (isTikTok) {
+      return ["--user-agent", config.KLAID_TIKTOK_USER_AGENT];
+    }
+  } catch {
+    // Let yt-dlp report malformed URLs.
+  }
+
+  return ["--impersonate", "chrome"];
 }
 
 function findSubtitleFile(downloadDir: string, fileName: string): string | null {
@@ -105,8 +125,7 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
     execFile(
       "yt-dlp",
       [
-        "--impersonate",
-        "chrome",
+        ...buildYtDlpRequestArgs(videoUrl),
         "-f",
         "bv*[height<=1080][filesize<50M]+ba/bv*[height<=720]+ba/bv*[height<=480]+ba/b",
         "--merge-output-format",
@@ -154,7 +173,11 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
     } catch {
       // best-effort
     }
-    throw new VideoDownloadError(videoUrl, "Video file too large or unavailable");
+    throw new VideoDownloadError(
+      videoUrl,
+      "Video file too large or unavailable",
+      "The video is unavailable or exceeds the 50 MB download limit.",
+    );
   }
 
   const subtitlePath = findSubtitleFile(downloadDir, fileName);
@@ -192,7 +215,7 @@ export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Prom
   return new Promise((resolve, reject) => {
     const child = execFile(
       "yt-dlp",
-      ["--impersonate", "chrome", "--dump-json", "--no-download", videoUrl],
+      [...buildYtDlpRequestArgs(videoUrl), "--dump-json", "--no-download", videoUrl],
       { maxBuffer: 1024 * 1024, timeout: timeoutMs },
       (error, stdout) => {
         if (error) {
@@ -251,9 +274,15 @@ export async function downloadMedia(logger: typeof globalLogger, url: string, in
       // Clean up empty gallery dir on failure
       rmSync(galleryDir, { recursive: true, force: true });
       if (galleryErr instanceof GalleryDownloadError) {
+        logger.warn("Video and gallery download failed", {
+          url,
+          videoError: videoErr.message,
+          galleryError: galleryErr.message,
+        });
         throw new VideoDownloadError(
           url,
           `Video download failed: ${videoErr.message}\nGallery download failed: ${galleryErr.message}`,
+          videoErr.userMessage,
         );
       }
       throw galleryErr;
@@ -322,7 +351,7 @@ export async function downloadMediaFromMessage(
 
   const downloads: MediaDownload[] = await downloadAllMedia(logger, urls).catch(async (err) => {
     if (err instanceof VideoDownloadError) {
-      await ctx.reply([caption, `Error downloading media:\n\n${err.message}`].filter(Boolean).join("\n\n---\n\n"), {
+      await ctx.reply([caption, `Couldn't download media:\n\n${err.userMessage}`].filter(Boolean).join("\n\n---\n\n"), {
         link_preview_options: { is_disabled: true },
         disable_notification: true,
         reply_parameters: {

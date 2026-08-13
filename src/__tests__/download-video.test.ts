@@ -7,6 +7,27 @@ import { createMockLogger } from "./utils/mock-logger.js";
 process.env.KLAID_TELEGRAM_BOT_TOKEN = "test-token";
 
 describe("download-video", () => {
+  describe("buildYtDlpRequestArgs", () => {
+    it("should use the explicit browser user-agent for TikTok URL variants", async () => {
+      const { buildYtDlpRequestArgs } = await import("../download-video.js");
+
+      const urls = ["https://vm.tiktok.com/ZN88kEtRb/", "https://www.tiktokv.com/share/video/7668090902816017671/"];
+
+      for (const url of urls) {
+        const args = buildYtDlpRequestArgs(url);
+        assert.deepStrictEqual(args.slice(0, 1), ["--user-agent"]);
+        assert.match(args[1], /Chrome\/140\.0\.0\.0/);
+        assert.ok(!args.includes("--impersonate"));
+      }
+    });
+
+    it("should preserve impersonation for non-TikTok URLs", async () => {
+      const { buildYtDlpRequestArgs } = await import("../download-video.js");
+
+      assert.deepStrictEqual(buildYtDlpRequestArgs("https://example.com/video"), ["--impersonate", "chrome"]);
+    });
+  });
+
   describe("VideoDownloadError", () => {
     it("should create error with videoUrl and message", async () => {
       const { VideoDownloadError } = await import("../download-video.js");
@@ -14,6 +35,10 @@ describe("download-video", () => {
 
       assert.strictEqual(error.videoUrl, "https://example.com");
       assert.strictEqual(error.message, "Download failed");
+      assert.strictEqual(
+        error.userMessage,
+        "The source site rejected the download request, or the media is private or unavailable. Please try again later.",
+      );
       assert.strictEqual(error.name, "VideoDownloadError");
     });
 
@@ -22,6 +47,16 @@ describe("download-video", () => {
       const error = new VideoDownloadError("https://example.com", null);
 
       assert.strictEqual(error.message, "Failed to download video");
+    });
+
+    it("should keep technical downloader details out of the user-facing message", async () => {
+      const { VideoDownloadError } = await import("../download-video.js");
+      const error = new VideoDownloadError(
+        "https://example.com",
+        "Video download failed: Command failed: yt-dlp ...\nGallery download failed: No images found in gallery",
+      );
+
+      assert.doesNotMatch(error.userMessage, /yt-dlp|gallery/i);
     });
   });
 

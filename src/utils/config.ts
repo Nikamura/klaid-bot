@@ -8,6 +8,7 @@ interface ConfigSchema {
   KLAID_AUTO_DL_URLS: string[];
   KLAID_AUTO_DL_DELETE_MESSAGE: boolean;
   KLAID_TELEGRAM_API_ROOT: string;
+  KLAID_TIKTOK_USER_AGENT: string;
 }
 
 class Config {
@@ -34,6 +35,9 @@ class Config {
       ]),
       KLAID_AUTO_DL_DELETE_MESSAGE: this.parseBooleanValue(process.env.KLAID_AUTO_DL_DELETE_MESSAGE, true),
       KLAID_TELEGRAM_API_ROOT: process.env.KLAID_TELEGRAM_API_ROOT || "",
+      KLAID_TIKTOK_USER_AGENT:
+        process.env.KLAID_TIKTOK_USER_AGENT ||
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
     };
   }
 
