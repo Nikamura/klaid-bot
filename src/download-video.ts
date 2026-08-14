@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { discoverUrls } from "./discover-urls.js";
@@ -10,6 +10,9 @@ import type { logger as globalLogger } from "./utils/logger.js";
 
 const DEFAULT_DOWNLOAD_ERROR_MESSAGE =
   "The source site rejected the download request, or the media is private or unavailable. Please try again later.";
+const TELEGRAM_MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const YT_DLP_MAX_FILESIZE = "50M";
+const YT_DLP_VIDEO_FORMAT = "bv*[height<=1080][filesize<50M]+ba/bv*[height<=720]+ba/bv*[height<=480]+ba/b";
 
 export class VideoDownloadError extends Error {
   constructor(
@@ -19,6 +22,78 @@ export class VideoDownloadError extends Error {
   ) {
     super(message ?? "Failed to download video");
     this.name = "VideoDownloadError";
+  }
+}
+
+export function buildYtDlpRequestAttempts(args: string[]): string[][] {
+  return [["--impersonate", "chrome", ...args], [...args]];
+}
+
+export function buildYtDlpDownloadArgs(downloadDir: string, fileName: string, videoUrl: string): string[] {
+  return [
+    "-f",
+    YT_DLP_VIDEO_FORMAT,
+    "--format-sort",
+    "vcodec:h264",
+    "--merge-output-format",
+    "mp4",
+    "--write-subs",
+    "--write-auto-subs",
+    "--sub-lang",
+    "en",
+    "--convert-subs",
+    "srt",
+    "--embed-thumbnail",
+    "--embed-metadata",
+    "-o",
+    `${downloadDir}/${fileName}.%(ext)s`,
+    "--max-filesize",
+    YT_DLP_MAX_FILESIZE,
+    videoUrl,
+  ];
+}
+
+async function runYtDlp(
+  videoUrl: string,
+  args: string[],
+  options: { maxBuffer?: number; timeout?: number } = {},
+): Promise<string> {
+  const errors: string[] = [];
+
+  for (const attemptArgs of buildYtDlpRequestAttempts(args)) {
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        const child = execFile("yt-dlp", attemptArgs, options, (error, stdout, stderr) => {
+          if (error) {
+            reject(new Error(stderr.trim() || error.message));
+            return;
+          }
+          resolve(stdout);
+        });
+        child.stdin?.end();
+      });
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new VideoDownloadError(videoUrl, errors.join("\n\nFallback attempt failed:\n"));
+}
+
+function cleanupDownloadFiles(downloadDir: string, fileName: string): void {
+  try {
+    const files = readdirSync(downloadDir);
+    for (const file of files) {
+      if (file.startsWith(`${fileName}.`)) {
+        try {
+          unlinkSync(`${downloadDir}/${file}`);
+        } catch {
+          // best-effort
+        }
+      }
+    }
+  } catch {
+    // best-effort
   }
 }
 
@@ -105,59 +180,14 @@ async function burnSubtitles(videoPath: string, subtitlePath: string): Promise<s
 async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
   const downloadDir = config.KLAID_DOWNLOAD_DIR;
 
-  await new Promise<void>((resolve, reject) => {
-    execFile(
-      "yt-dlp",
-      [
-        "--impersonate",
-        "chrome",
-        "-f",
-        "bv*[height<=1080][filesize<50M]+ba/bv*[height<=720]+ba/bv*[height<=480]+ba/b",
-        "--merge-output-format",
-        "mp4",
-        "--write-subs",
-        "--write-auto-subs",
-        "--sub-lang",
-        "en",
-        "--convert-subs",
-        "srt",
-        "--embed-thumbnail",
-        "--embed-metadata",
-        "-o",
-        `${downloadDir}/${fileName}.%(ext)s`,
-        "--max-filesize",
-        "50M",
-        videoUrl,
-      ],
-      (error) => {
-        if (error) {
-          reject(new VideoDownloadError(videoUrl, error.message));
-          return;
-        }
-        resolve();
-      },
-    );
-  });
+  await runYtDlp(videoUrl, buildYtDlpDownloadArgs(downloadDir, fileName, videoUrl));
 
   const videoPath = `${downloadDir}/${fileName}.mp4`;
 
-  if (!existsSync(videoPath)) {
-    // yt-dlp exited successfully but no .mp4 produced (e.g. --max-filesize rejected the video track)
-    // Clean up any partial files
-    try {
-      const files = readdirSync(downloadDir);
-      for (const f of files) {
-        if (f.startsWith(`${fileName}.`)) {
-          try {
-            unlinkSync(`${downloadDir}/${f}`);
-          } catch {
-            // best-effort
-          }
-        }
-      }
-    } catch {
-      // best-effort
-    }
+  if (!existsSync(videoPath) || statSync(videoPath).size >= TELEGRAM_MAX_VIDEO_BYTES) {
+    // yt-dlp can exit successfully without a file when --max-filesize rejects it. Also verify the final merged file,
+    // since individually acceptable video and audio streams can exceed Telegram's limit after merging.
+    cleanupDownloadFiles(downloadDir, fileName);
     throw new VideoDownloadError(
       videoUrl,
       "Video file too large or unavailable",
@@ -197,31 +227,22 @@ export interface VideoMeta {
 }
 
 export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Promise<VideoMeta> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(
-      "yt-dlp",
-      ["--impersonate", "chrome", "--dump-json", "--no-download", videoUrl],
-      { maxBuffer: 1024 * 1024, timeout: timeoutMs },
-      (error, stdout) => {
-        if (error) {
-          reject(new VideoDownloadError(videoUrl, error.message));
-          return;
-        }
-        try {
-          const data = JSON.parse(stdout);
-          resolve({
-            title: data.title || data.fulltitle || "Video",
-            thumbnail: data.thumbnail || null,
-            duration: data.duration ? Math.round(data.duration) : null,
-            uploader: data.uploader || data.channel || null,
-          });
-        } catch {
-          resolve({ title: "Video", thumbnail: null, duration: null, uploader: null });
-        }
-      },
-    );
-    child.stdin?.end();
+  const stdout = await runYtDlp(videoUrl, ["--dump-json", "--no-download", videoUrl], {
+    maxBuffer: 1024 * 1024,
+    timeout: timeoutMs,
   });
+
+  try {
+    const data = JSON.parse(stdout);
+    return {
+      title: data.title || data.fulltitle || "Video",
+      thumbnail: data.thumbnail || null,
+      duration: data.duration ? Math.round(data.duration) : null,
+      uploader: data.uploader || data.channel || null,
+    };
+  } catch {
+    return { title: "Video", thumbnail: null, duration: null, uploader: null };
+  }
 }
 
 export interface VideoDownload {

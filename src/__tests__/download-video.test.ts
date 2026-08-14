@@ -7,6 +7,27 @@ import { createMockLogger } from "./utils/mock-logger.js";
 process.env.KLAID_TELEGRAM_BOT_TOKEN = "test-token";
 
 describe("download-video", () => {
+  describe("yt-dlp arguments", () => {
+    it("should retry without browser impersonation", async () => {
+      const { buildYtDlpRequestAttempts } = await import("../download-video.js");
+      const args = ["--dump-json", "https://example.com/video"];
+
+      assert.deepStrictEqual(buildYtDlpRequestAttempts(args), [["--impersonate", "chrome", ...args], args]);
+    });
+
+    it("should prefer Telegram-compatible H.264 video within the size limit", async () => {
+      const { buildYtDlpDownloadArgs } = await import("../download-video.js");
+      const args = buildYtDlpDownloadArgs("/tmp/downloads", "video", "https://example.com/video");
+
+      const formatSortIndex = args.indexOf("--format-sort");
+      const maxFilesizeIndex = args.indexOf("--max-filesize");
+      assert.strictEqual(args[formatSortIndex + 1], "vcodec:h264");
+      assert.strictEqual(args[maxFilesizeIndex + 1], "50M");
+      assert.ok(args.includes("--merge-output-format"));
+      assert.ok(args.includes("mp4"));
+    });
+  });
+
   describe("VideoDownloadError", () => {
     it("should create error with videoUrl and message", async () => {
       const { VideoDownloadError } = await import("../download-video.js");
