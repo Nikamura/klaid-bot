@@ -7,27 +7,6 @@ import { createMockLogger } from "./utils/mock-logger.js";
 process.env.KLAID_TELEGRAM_BOT_TOKEN = "test-token";
 
 describe("download-video", () => {
-  describe("buildYtDlpRequestArgs", () => {
-    it("should use the explicit browser user-agent for TikTok URL variants", async () => {
-      const { buildYtDlpRequestArgs } = await import("../download-video.js");
-
-      const urls = ["https://vm.tiktok.com/ZN88kEtRb/", "https://www.tiktokv.com/share/video/7668090902816017671/"];
-
-      for (const url of urls) {
-        const args = buildYtDlpRequestArgs(url);
-        assert.deepStrictEqual(args.slice(0, 1), ["--user-agent"]);
-        assert.match(args[1], /Chrome\/140\.0\.0\.0/);
-        assert.ok(!args.includes("--impersonate"));
-      }
-    });
-
-    it("should preserve impersonation for non-TikTok URLs", async () => {
-      const { buildYtDlpRequestArgs } = await import("../download-video.js");
-
-      assert.deepStrictEqual(buildYtDlpRequestArgs("https://example.com/video"), ["--impersonate", "chrome"]);
-    });
-  });
-
   describe("VideoDownloadError", () => {
     it("should create error with videoUrl and message", async () => {
       const { VideoDownloadError } = await import("../download-video.js");

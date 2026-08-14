@@ -22,22 +22,6 @@ export class VideoDownloadError extends Error {
   }
 }
 
-export function buildYtDlpRequestArgs(videoUrl: string): string[] {
-  try {
-    const hostname = new URL(videoUrl).hostname.toLowerCase();
-    const isTikTok = ["tiktok.com", "tiktokv.com"].some(
-      (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
-    );
-    if (isTikTok) {
-      return ["--user-agent", config.KLAID_TIKTOK_USER_AGENT];
-    }
-  } catch {
-    // Let yt-dlp report malformed URLs.
-  }
-
-  return ["--impersonate", "chrome"];
-}
-
 function findSubtitleFile(downloadDir: string, fileName: string): string | null {
   let files: string[];
   try {
@@ -125,7 +109,8 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
     execFile(
       "yt-dlp",
       [
-        ...buildYtDlpRequestArgs(videoUrl),
+        "--impersonate",
+        "chrome",
         "-f",
         "bv*[height<=1080][filesize<50M]+ba/bv*[height<=720]+ba/bv*[height<=480]+ba/b",
         "--merge-output-format",
@@ -215,7 +200,7 @@ export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Prom
   return new Promise((resolve, reject) => {
     const child = execFile(
       "yt-dlp",
-      [...buildYtDlpRequestArgs(videoUrl), "--dump-json", "--no-download", videoUrl],
+      ["--impersonate", "chrome", "--dump-json", "--no-download", videoUrl],
       { maxBuffer: 1024 * 1024, timeout: timeoutMs },
       (error, stdout) => {
         if (error) {

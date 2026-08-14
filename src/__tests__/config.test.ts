@@ -171,17 +171,5 @@ describe("config", () => {
       const config = await importConfig();
       assert.strictEqual(config.KLAID_TELEGRAM_API_ROOT, "https://custom.api.com");
     });
-
-    it("should use a Chrome user-agent for TikTok by default", async () => {
-      process.env.KLAID_TIKTOK_USER_AGENT = undefined;
-      const config = await importConfig();
-      assert.match(config.KLAID_TIKTOK_USER_AGENT, /Chrome\/140\.0\.0\.0/);
-    });
-
-    it("should allow overriding the TikTok user-agent", async () => {
-      process.env.KLAID_TIKTOK_USER_AGENT = "Custom user agent";
-      const config = await importConfig();
-      assert.strictEqual(config.KLAID_TIKTOK_USER_AGENT, "Custom user agent");
-    });
   });
 });
