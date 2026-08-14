@@ -26,6 +26,15 @@ describe("download-video", () => {
       assert.ok(args.includes("--merge-output-format"));
       assert.ok(args.includes("mp4"));
     });
+
+    it("should recognize TikTok domains for the video fallback", async () => {
+      const { isTikTokUrl } = await import("../download-video.js");
+
+      assert.strictEqual(isTikTokUrl("https://vm.tiktok.com/abc"), true);
+      assert.strictEqual(isTikTokUrl("https://www.tiktok.com/@user/video/123"), true);
+      assert.strictEqual(isTikTokUrl("https://example.com/tiktok.com/video"), false);
+      assert.strictEqual(isTikTokUrl("not a URL"), false);
+    });
   });
 
   describe("VideoDownloadError", () => {

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from
 import { InputFile, InputMediaBuilder } from "grammy";
 import type { Message } from "grammy/types";
 import { discoverUrls } from "./discover-urls.js";
-import { downloadGallery, GalleryDownloadError } from "./download-gallery.js";
+import { downloadGallery, downloadGalleryVideo, GalleryDownloadError } from "./download-gallery.js";
 import type { BotContext } from "./types/bot-context.js";
 import { config } from "./utils/config.js";
 import type { logger as globalLogger } from "./utils/logger.js";
@@ -97,6 +97,15 @@ function cleanupDownloadFiles(downloadDir: string, fileName: string): void {
   }
 }
 
+export function isTikTokUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return ["tiktok.com", "tiktokv.com"].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
 function findSubtitleFile(downloadDir: string, fileName: string): string | null {
   let files: string[];
   try {
@@ -175,6 +184,68 @@ async function burnSubtitles(videoPath: string, subtitlePath: string): Promise<s
   });
 
   return outputPath;
+}
+
+async function transcodeForTelegram(inputPath: string, outputPath: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      "ffmpeg",
+      [
+        "-i",
+        inputPath,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
+        "-y",
+        outputPath,
+      ],
+      { timeout: 120_000 },
+      (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      },
+    );
+  });
+}
+
+async function downloadTikTokFallback(downloadDir: string, fileName: string, videoUrl: string): Promise<string> {
+  const fallbackDir = `${downloadDir}/gallery-${fileName}`;
+  const outputPath = `${downloadDir}/${fileName}.mp4`;
+  mkdirSync(fallbackDir, { recursive: true });
+
+  try {
+    const fallbackPath = await downloadGalleryVideo(fallbackDir, videoUrl);
+    await transcodeForTelegram(fallbackPath, outputPath);
+    if (statSync(outputPath).size >= TELEGRAM_MAX_VIDEO_BYTES) {
+      throw new VideoDownloadError(
+        videoUrl,
+        "Fallback video exceeds Telegram's upload limit",
+        "The video is unavailable or exceeds the 50 MB download limit.",
+      );
+    }
+    return outputPath;
+  } catch (error) {
+    try {
+      unlinkSync(outputPath);
+    } catch {
+      // may not exist
+    }
+    throw error;
+  } finally {
+    rmSync(fallbackDir, { recursive: true, force: true });
+  }
 }
 
 async function dowloadVideo(fileName: string, videoUrl: string): Promise<string> {
@@ -268,6 +339,19 @@ export async function downloadMedia(logger: typeof globalLogger, url: string, in
     return { type: "video", videoPath, meta };
   } catch (videoErr) {
     if (!(videoErr instanceof VideoDownloadError)) throw videoErr;
+
+    if (isTikTokUrl(url)) {
+      try {
+        logger.debug("Trying TikTok fallback download", { url });
+        const videoPath = await downloadTikTokFallback(config.KLAID_DOWNLOAD_DIR, fileName, url);
+        return { type: "video", videoPath, meta: null };
+      } catch (fallbackErr) {
+        logger.debug("TikTok fallback download failed", {
+          url,
+          fallbackError: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+        });
+      }
+    }
 
     logger.debug("Video download failed, trying gallery download", { url, videoError: videoErr.message });
     const galleryDir = `${config.KLAID_DOWNLOAD_DIR}/gallery-${fileName}`;
