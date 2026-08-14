@@ -7,8 +7,10 @@ ENV DEBIAN_FRONTEND="noninteractive" \
     TERM="xterm"
 
 RUN apt-get update && \
-    apt-get --no-install-recommends install -y curl ca-certificates binutils xz-utils python3 python3-pip unzip && \
+    apt-get --no-install-recommends install -y curl ca-certificates binutils xz-utils python3 python3-pip python3-venv unzip && \
     curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh && \
+    python3 -m venv /opt/yt-dlp-plain && \
+    /opt/yt-dlp-plain/bin/pip install --no-cache-dir -U "yt-dlp[default] @ https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.tar.gz" && \
     python3 -m pip install -U "yt-dlp[default,curl-cffi] @ https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.tar.gz" gallery-dl --break-system-packages && \
     curl -Ls https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar Jx -C /usr/local/bin --transform='s:.*/::' --wildcards '*/ffmpeg' '*/ffplay' '*/ffprobe' && \
     chmod a+rx /usr/local/bin/ffmpeg && \
@@ -18,6 +20,8 @@ RUN apt-get update && \
 WORKDIR /usr/src/app
 
 ENV PNPM_HOME="/pnpm"
+
+ENV KLAID_TIKTOK_YT_DLP="/opt/yt-dlp-plain/bin/yt-dlp"
 
 ENV PATH="/usr/local/bin:$PNPM_HOME:$PATH"
 

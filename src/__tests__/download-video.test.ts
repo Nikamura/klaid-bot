@@ -8,11 +8,14 @@ process.env.KLAID_TELEGRAM_BOT_TOKEN = "test-token";
 
 describe("download-video", () => {
   describe("yt-dlp arguments", () => {
-    it("should retry without browser impersonation", async () => {
+    it("should retry non-TikTok downloads without browser impersonation", async () => {
       const { buildYtDlpRequestAttempts } = await import("../download-video.js");
       const args = ["--dump-json", "https://example.com/video"];
 
-      assert.deepStrictEqual(buildYtDlpRequestAttempts(args), [["--impersonate", "chrome", ...args], args]);
+      assert.deepStrictEqual(buildYtDlpRequestAttempts("https://example.com/video", args), [
+        { executable: "yt-dlp", args: ["--impersonate", "chrome", ...args] },
+        { executable: "yt-dlp", args },
+      ]);
     });
 
     it("should prefer Telegram-compatible H.264 video within the size limit", async () => {
@@ -27,13 +30,15 @@ describe("download-video", () => {
       assert.ok(args.includes("mp4"));
     });
 
-    it("should recognize TikTok domains for the video fallback", async () => {
-      const { isTikTokUrl } = await import("../download-video.js");
+    it("should use isolated yt-dlp without forced impersonation for TikTok", async () => {
+      const { buildYtDlpRequestAttempts } = await import("../download-video.js");
+      const args = ["--dump-json", "https://vm.tiktok.com/abc"];
+      const executable = "/opt/yt-dlp-plain/bin/yt-dlp";
 
-      assert.strictEqual(isTikTokUrl("https://vm.tiktok.com/abc"), true);
-      assert.strictEqual(isTikTokUrl("https://www.tiktok.com/@user/video/123"), true);
-      assert.strictEqual(isTikTokUrl("https://example.com/tiktok.com/video"), false);
-      assert.strictEqual(isTikTokUrl("not a URL"), false);
+      assert.deepStrictEqual(buildYtDlpRequestAttempts("https://vm.tiktok.com/abc", args, executable), [
+        { executable, args },
+      ]);
+      assert.strictEqual(buildYtDlpRequestAttempts("https://example.com/tiktok.com/video", args).length, 2);
     });
   });
 

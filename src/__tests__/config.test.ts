@@ -171,5 +171,17 @@ describe("config", () => {
       const config = await importConfig();
       assert.strictEqual(config.KLAID_TELEGRAM_API_ROOT, "https://custom.api.com");
     });
+
+    it("should use yt-dlp for TikTok by default", async () => {
+      process.env.KLAID_TIKTOK_YT_DLP = undefined;
+      const config = await importConfig();
+      assert.strictEqual(config.KLAID_TIKTOK_YT_DLP, "yt-dlp");
+    });
+
+    it("should allow an isolated yt-dlp executable for TikTok", async () => {
+      process.env.KLAID_TIKTOK_YT_DLP = "/opt/yt-dlp-plain/bin/yt-dlp";
+      const config = await importConfig();
+      assert.strictEqual(config.KLAID_TIKTOK_YT_DLP, "/opt/yt-dlp-plain/bin/yt-dlp");
+    });
   });
 });
