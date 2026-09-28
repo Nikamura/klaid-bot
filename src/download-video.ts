@@ -383,19 +383,53 @@ export async function downloadMediaFromMessage(
   }
 
   const caption = authorsMessageDeleted ? `${user}: ${text}` : null;
+  let statusMessageId: number | undefined;
+  const statusText = (status: string) =>
+    [status, caption?.slice(0, 4096 - status.length - 2)].filter(Boolean).join("\n\n");
+  const replyOptions = {
+    link_preview_options: { is_disabled: true },
+    disable_notification: true,
+    message_thread_id: message.message_thread_id,
+    reply_parameters: {
+      message_id: message.message_id,
+      allow_sending_without_reply: true,
+    },
+  };
+
+  if (authorsMessageDeleted) {
+    try {
+      const status = await ctx.reply(statusText("Downloading… Your media will appear shortly."), replyOptions);
+      statusMessageId = status.message_id;
+    } catch (err) {
+      logger.error("Error posting download status", err);
+    }
+  }
+
+  const updateStatus = async (status: string) => {
+    if (statusMessageId !== undefined) {
+      try {
+        await ctx.api.editMessageText(message.chat.id, statusMessageId, statusText(status), {
+          link_preview_options: { is_disabled: true },
+        });
+        return;
+      } catch (err) {
+        logger.error("Error updating download status", err);
+      }
+    }
+    try {
+      await ctx.reply(statusText(status), replyOptions);
+    } catch (err) {
+      logger.error("Error sending download status fallback", err);
+    }
+  };
 
   const downloads: MediaDownload[] = await downloadAllMedia(logger, urls).catch(async (err) => {
+    logger.error("Error downloading media", err);
     if (err instanceof VideoDownloadError) {
-      await ctx.reply([caption, `Couldn't download media:\n\n${err.userMessage}`].filter(Boolean).join("\n\n---\n\n"), {
-        link_preview_options: { is_disabled: true },
-        disable_notification: true,
-        reply_parameters: {
-          message_id: message.message_id,
-          allow_sending_without_reply: true,
-        },
-      });
+      await updateStatus(`Couldn't download media:\n\n${err.userMessage}`);
       return [];
     }
+    await updateStatus("Couldn't download media. Please try again later.");
     throw err;
   });
 
@@ -403,71 +437,76 @@ export async function downloadMediaFromMessage(
     const videos = downloads.filter((d): d is VideoDownload => d.type === "video");
     const galleries = downloads.filter((d): d is GalleryDownload => d.type === "gallery");
 
+    const videoMedia = videos.map((download, i) =>
+      InputMediaBuilder.video(new InputFile(download.videoPath), {
+        caption:
+          [i === 0 ? caption : null, download.meta ? formatMeta(download.meta) : null]
+            .filter(Boolean)
+            .join("\n\n")
+            .slice(0, 1024) || undefined,
+      }),
+    );
+    const galleryMedia = galleries.map((gallery, galleryIndex) =>
+      gallery.filePaths.map((filePath, i) =>
+        InputMediaBuilder.photo(new InputFile(filePath), {
+          caption: !videos.length && galleryIndex === 0 && i === 0 ? caption?.slice(0, 1024) : undefined,
+        }),
+      ),
+    );
+    const batches = [videoMedia, ...galleryMedia].filter((batch) => batch.length);
+    const singleMedia = batches.length === 1 && batches[0].length === 1 ? batches[0][0] : undefined;
+    const mediaOptions = {
+      message_thread_id: message.message_thread_id,
+      // Do not reply to the temporary status, which will be deleted after delivery.
+      reply_parameters: authorsMessageDeleted
+        ? undefined
+        : { message_id: message.message_id, allow_sending_without_reply: true },
+    };
+
     try {
-      if (videos.length) {
-        await ctx.replyWithMediaGroup(
-          videos.map((download, i) => {
-            const parts = [i === 0 ? caption : null, download.meta ? formatMeta(download.meta) : null];
-            const videoCaption = parts.filter(Boolean).join("\n\n") || undefined;
-            return InputMediaBuilder.video(new InputFile(download.videoPath), {
-              caption: videoCaption,
-            });
-          }),
-          {
-            reply_parameters: {
-              message_id: message.message_id,
-              allow_sending_without_reply: true,
-            },
-          },
-        );
+      let replacedStatus = false;
+      if (statusMessageId !== undefined && singleMedia) {
+        try {
+          await ctx.api.editMessageMedia(message.chat.id, statusMessageId, singleMedia);
+          replacedStatus = true;
+        } catch (err) {
+          logger.error("Error replacing download status with media", err);
+        }
       }
 
-      for (const gallery of galleries) {
-        const galleryCaption = !videos.length && gallery === galleries[0] ? caption : null;
-        if (gallery.filePaths.length === 1) {
-          await ctx.replyWithPhoto(new InputFile(gallery.filePaths[0]), {
-            caption: galleryCaption ?? undefined,
-            reply_parameters: {
-              message_id: message.message_id,
-              allow_sending_without_reply: true,
-            },
-          });
-        } else {
-          await ctx.replyWithMediaGroup(
-            gallery.filePaths.map((filePath, i) =>
-              InputMediaBuilder.photo(new InputFile(filePath), {
-                caption: i === 0 ? (galleryCaption ?? undefined) : undefined,
-              }),
-            ),
-            {
-              reply_parameters: {
-                message_id: message.message_id,
-                allow_sending_without_reply: true,
-              },
-            },
-          );
+      if (!replacedStatus) {
+        for (const batch of batches) {
+          if (batch.length === 1) {
+            const media = batch[0];
+            if (media.type === "video") {
+              await ctx.replyWithVideo(media.media, { ...mediaOptions, caption: media.caption });
+            } else {
+              await ctx.replyWithPhoto(media.media, { ...mediaOptions, caption: media.caption });
+            }
+          } else {
+            await ctx.replyWithMediaGroup(batch, mediaOptions);
+          }
+        }
+        if (statusMessageId !== undefined) {
+          try {
+            await ctx.api.deleteMessage(message.chat.id, statusMessageId);
+          } catch (err) {
+            logger.error("Error deleting download status", err);
+            await updateStatus("Ready! Your media is below.");
+          }
         }
       }
     } catch (err) {
       logger.error("Error sending media group", err);
-      if (err instanceof Error) {
-        await ctx.reply([caption, `Error sending media:\n\n${err.message}`].filter(Boolean).join("\n\n---\n\n"), {
-          link_preview_options: { is_disabled: true },
-          disable_notification: true,
-          reply_parameters: {
-            message_id: message.message_id,
-            allow_sending_without_reply: true,
-          },
-        });
-      }
-    }
-
-    // Clean up downloaded files
-    for (const download of downloads) {
-      if (download.type === "video") {
-        unlinkSync(download.videoPath);
-      } else {
-        rmSync(download.galleryDir, { recursive: true, force: true });
+      await updateStatus("Couldn't send all media. Please try again later.");
+    } finally {
+      // Clean up downloaded files even if reporting a delivery error fails.
+      for (const download of downloads) {
+        if (download.type === "video") {
+          unlinkSync(download.videoPath);
+        } else {
+          rmSync(download.galleryDir, { recursive: true, force: true });
+        }
       }
     }
   }
