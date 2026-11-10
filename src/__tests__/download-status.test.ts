@@ -5,6 +5,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, it, type TestContext } from "node:test";
+import { InputFile } from "grammy";
 import { createMockContext } from "./utils/mock-context.js";
 import { createMockLogger } from "./utils/mock-logger.js";
 
@@ -13,12 +14,16 @@ process.env.KLAID_TELEGRAM_BOT_TOKEN = "test-token";
 process.env.KLAID_DOWNLOAD_DIR = downloadDir;
 after(() => rmSync(downloadDir, { recursive: true, force: true }));
 
-async function setup(t: TestContext, mode: "video" | "gallery" | "photo" | "failure" = "video") {
+async function setup(
+  t: TestContext,
+  mode: "video" | "gallery" | "photo" | "failure" = "video",
+  messageText = "https://example.com/video",
+) {
   const events: string[] = [];
   const edits: unknown[][] = [];
   const mediaEdits: unknown[][] = [];
   const deletions: unknown[][] = [];
-  const { ctx, mocks } = createMockContext({ messageText: "https://example.com/video" });
+  const { ctx, mocks } = createMockContext({ messageText });
   const message = ctx.message;
   assert.ok(message);
   const reply = t.mock.method(ctx, "reply", async () => {
@@ -74,9 +79,11 @@ async function setup(t: TestContext, mode: "video" | "gallery" | "photo" | "fail
       if (mode === "gallery") writeFileSync(join(directory, "2.jpg"), "photo");
       callback(null, "", "");
     } else if (flags.includes("--dump-json")) {
-      callback(null, JSON.stringify({ title: "Test video" }), "");
+      callback(null, JSON.stringify({ title: "Test video", duration: 600 }), "");
     } else {
-      writeFileSync(flags[flags.indexOf("-o") + 1].replace("%(ext)s", "mp4"), "video");
+      const output = flags[flags.indexOf("-o") + 1];
+      writeFileSync(output.replace("%(ext)s", "mp4"), "video");
+      if (flags.includes("--write-thumbnail")) writeFileSync(output.replace("%(ext)s", "jpg"), "cover");
       callback(null, "", "");
     }
     return { stdin: { end() {} } };
@@ -208,4 +215,19 @@ it("clears the pending text if status deletion fails after successful delivery",
   await run();
   assert.deepEqual(events.slice(-2), ["media", "edit"]);
   assert.match(String(edits[0][2]), /Ready!/);
+});
+
+it("sends the yt-dlp thumbnail as the cover and starts at the linked time", async (t) => {
+  const { run, mediaEdits } = await setup(t, "video", "https://example.com/video?t=1m30s");
+  await run();
+  const media = mediaEdits[0][2] as { cover?: unknown; start_timestamp?: number };
+  assert.ok(media.cover instanceof InputFile);
+  assert.equal(media.start_timestamp, 90);
+  assert.deepEqual(readdirSync(downloadDir), []);
+});
+
+it("ignores a linked time beyond the end of the video", async (t) => {
+  const { run, mediaEdits } = await setup(t, "video", "https://example.com/video?t=601");
+  await run();
+  assert.equal((mediaEdits[0][2] as { start_timestamp?: number }).start_timestamp, undefined);
 });

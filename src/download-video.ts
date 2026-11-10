@@ -68,6 +68,10 @@ export function buildYtDlpDownloadArgs(downloadDir: string, fileName: string, vi
     "--convert-subs",
     "srt",
     "--embed-thumbnail",
+    // Keep the thumbnail next to the video as well, so it can be uploaded as the Telegram cover.
+    "--write-thumbnail",
+    "--convert-thumbnails",
+    "jpg",
     "--embed-metadata",
     "-o",
     `${downloadDir}/${fileName}.%(ext)s`,
@@ -248,6 +252,34 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
   }
 }
 
+function findCoverFile(fileName: string): string | null {
+  const coverPath = `${config.KLAID_DOWNLOAD_DIR}/${fileName}.jpg`;
+  return existsSync(coverPath) ? coverPath : null;
+}
+
+/**
+ * Reads the start time a video link points at (`?t=90`, `?t=1m30s`, `?start=90`, `#t=90`), in seconds.
+ */
+export function parseStartTimestamp(url: string): number | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+  const query = parsed.searchParams;
+  const raw =
+    query.get("t") ??
+    query.get("start") ??
+    query.get("time_continue") ??
+    new URLSearchParams(parsed.hash.slice(1)).get("t");
+  const match = raw ? /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(raw) : null;
+  if (!match) return undefined;
+  const [hours, minutes, seconds] = match.slice(1).map((part) => Number(part ?? 0));
+  const total = hours * 3600 + minutes * 60 + seconds;
+  return total > 0 ? total : undefined;
+}
+
 export interface VideoMeta {
   title: string;
   thumbnail: string | null;
@@ -277,7 +309,21 @@ export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Prom
 export interface VideoDownload {
   type: "video";
   videoPath: string;
+  /** JPEG thumbnail saved by yt-dlp, sent as the video cover. */
+  coverPath: string | null;
+  /** Where playback starts, taken from the source URL. */
+  startTimestamp?: number;
   meta: VideoMeta | null;
+}
+
+export function cleanupDownload(download: MediaDownload): void {
+  if (download.type === "video") {
+    for (const filePath of [download.videoPath, download.coverPath]) {
+      if (filePath) rmSync(filePath, { force: true });
+    }
+  } else {
+    rmSync(download.galleryDir, { recursive: true, force: true });
+  }
 }
 
 export interface GalleryDownload {
@@ -294,7 +340,10 @@ export async function downloadMedia(logger: typeof globalLogger, url: string, in
   try {
     logger.debug("Trying video download", { url });
     const [videoPath, meta] = await Promise.all([dowloadVideo(fileName, url), fetchVideoMeta(url).catch(() => null)]);
-    return { type: "video", videoPath, meta };
+    // `t` is not a start time on every site, so only trust it when it falls inside the known duration.
+    const start = parseStartTimestamp(url);
+    const startTimestamp = start && meta?.duration && start < meta.duration ? start : undefined;
+    return { type: "video", videoPath, coverPath: findCoverFile(fileName), startTimestamp, meta };
   } catch (videoErr) {
     if (!(videoErr instanceof VideoDownloadError)) throw videoErr;
 
@@ -329,7 +378,9 @@ export async function downloadVideos(logger: typeof globalLogger, urls: string[]
   return await Promise.all(
     urls.map(async (url, index) => {
       logger.debug("Downloading video", { url });
-      const videoPath = await dowloadVideo(`${Date.now()}-${index}`, url);
+      const fileName = `${Date.now()}-${index}`;
+      const videoPath = await dowloadVideo(fileName, url);
+      rmSync(`${config.KLAID_DOWNLOAD_DIR}/${fileName}.jpg`, { force: true });
       return { videoPath };
     }),
   );
@@ -439,6 +490,8 @@ export async function downloadMediaFromMessage(
 
     const videoMedia = videos.map((download, i) =>
       InputMediaBuilder.video(new InputFile(download.videoPath), {
+        cover: download.coverPath ? new InputFile(download.coverPath) : undefined,
+        start_timestamp: download.startTimestamp,
         caption:
           [i === 0 ? caption : null, download.meta ? formatMeta(download.meta) : null]
             .filter(Boolean)
@@ -479,7 +532,12 @@ export async function downloadMediaFromMessage(
           if (batch.length === 1) {
             const media = batch[0];
             if (media.type === "video") {
-              await ctx.replyWithVideo(media.media, { ...mediaOptions, caption: media.caption });
+              await ctx.replyWithVideo(media.media, {
+                ...mediaOptions,
+                caption: media.caption,
+                cover: media.cover,
+                start_timestamp: media.start_timestamp,
+              });
             } else {
               await ctx.replyWithPhoto(media.media, { ...mediaOptions, caption: media.caption });
             }
@@ -501,13 +559,7 @@ export async function downloadMediaFromMessage(
       await updateStatus("Couldn't send all media. Please try again later.");
     } finally {
       // Clean up downloaded files even if reporting a delivery error fails.
-      for (const download of downloads) {
-        if (download.type === "video") {
-          unlinkSync(download.videoPath);
-        } else {
-          rmSync(download.galleryDir, { recursive: true, force: true });
-        }
-      }
+      for (const download of downloads) cleanupDownload(download);
     }
   }
 

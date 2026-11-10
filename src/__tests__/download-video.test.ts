@@ -30,6 +30,34 @@ describe("download-video", () => {
       assert.ok(args.includes("mp4"));
     });
 
+    it("should keep a JPEG thumbnail for the Telegram cover", async () => {
+      const { buildYtDlpDownloadArgs } = await import("../download-video.js");
+      const args = buildYtDlpDownloadArgs("/tmp/downloads", "video", "https://example.com/video");
+
+      assert.ok(args.includes("--write-thumbnail"));
+      assert.strictEqual(args[args.indexOf("--convert-thumbnails") + 1], "jpg");
+    });
+  });
+
+  describe("parseStartTimestamp", () => {
+    it("should read start times from the query string and fragment", async () => {
+      const { parseStartTimestamp } = await import("../download-video.js");
+
+      assert.strictEqual(parseStartTimestamp("https://youtube.com/watch?t=90s&v=abc"), 90);
+      assert.strictEqual(parseStartTimestamp("https://youtu.be/abc?t=1h2m3s"), 3723);
+      assert.strictEqual(parseStartTimestamp("https://youtu.be/abc#t=42"), 42);
+      assert.strictEqual(parseStartTimestamp("https://example.com/v?start=10"), 10);
+    });
+
+    it("should ignore missing, zero and non-time values", async () => {
+      const { parseStartTimestamp } = await import("../download-video.js");
+
+      assert.strictEqual(parseStartTimestamp("https://youtu.be/abc"), undefined);
+      assert.strictEqual(parseStartTimestamp("https://youtu.be/abc?t=0"), undefined);
+      assert.strictEqual(parseStartTimestamp("https://x.com/a/status/1?t=AbC123xyz&s=20"), undefined);
+      assert.strictEqual(parseStartTimestamp("not a url"), undefined);
+    });
+
     it("should use isolated yt-dlp without forced impersonation for TikTok", async () => {
       const { buildYtDlpRequestAttempts } = await import("../download-video.js");
       const args = ["--dump-json", "https://vm.tiktok.com/abc"];

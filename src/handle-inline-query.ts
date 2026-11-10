@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { rmSync, unlinkSync } from "node:fs";
 import { InlineKeyboard, InputFile, InputMediaBuilder } from "grammy";
 import { discoverUrls } from "./discover-urls.js";
-import { downloadMedia, fetchVideoMeta, type MediaDownload, type VideoMeta } from "./download-video.js";
+import {
+  cleanupDownload,
+  downloadMedia,
+  fetchVideoMeta,
+  type MediaDownload,
+  type VideoMeta,
+} from "./download-video.js";
 import type { BotContext } from "./types/bot-context.js";
 
 function formatDuration(seconds: number): string {
@@ -54,18 +59,6 @@ export async function handleInlineQuery(ctx: BotContext) {
   );
 }
 
-function cleanupDownload(download: MediaDownload) {
-  if (download.type === "video") {
-    try {
-      unlinkSync(download.videoPath);
-    } catch {
-      // File may not exist if download failed
-    }
-  } else {
-    rmSync(download.galleryDir, { recursive: true, force: true });
-  }
-}
-
 export async function handleChosenInlineResult(ctx: BotContext) {
   const chosenResult = ctx.chosenInlineResult;
   if (!chosenResult) return;
@@ -112,7 +105,9 @@ export async function handleChosenInlineResult(ctx: BotContext) {
     const meta = await metaPromise;
 
     if (download.type === "video") {
-      const tempMessage = await ctx.api.sendVideo(userId, new InputFile(download.videoPath));
+      const tempMessage = await ctx.api.sendVideo(userId, new InputFile(download.videoPath), {
+        cover: download.coverPath ? new InputFile(download.coverPath) : undefined,
+      });
       const fileId = tempMessage.video?.file_id;
 
       if (!fileId) {
@@ -125,7 +120,13 @@ export async function handleChosenInlineResult(ctx: BotContext) {
       }
 
       const caption = meta ? formatMeta(meta, url) : `<a href="${url}">Source</a>`;
-      const media = InputMediaBuilder.video(fileId, { caption, parse_mode: "HTML" });
+      // Inline messages cannot take uploads, so reuse the cover Telegram stored with the temporary message.
+      const media = InputMediaBuilder.video(fileId, {
+        caption,
+        parse_mode: "HTML",
+        cover: tempMessage.video?.cover?.at(-1)?.file_id,
+        start_timestamp: download.startTimestamp,
+      });
       await ctx.api.editMessageMediaInline(inlineMessageId, media, {
         reply_markup: { inline_keyboard: [] },
       });
