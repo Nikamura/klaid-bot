@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "get-urls": "12.1.0",
-    "grammy": "1.45.1",
+    "grammy": "1.46.0",
     "winston": "3.19.0"
   },
   "devDependencies": {

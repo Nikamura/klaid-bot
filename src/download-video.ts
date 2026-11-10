@@ -421,45 +421,52 @@ export async function downloadMediaFromMessage(
 
   logger.debug("Received message", { urls, user, chat: message.chat });
 
-  let authorsMessageDeleted = false;
-  if (autoDeleteMessage) {
-    await ctx
-      .deleteMessage()
-      .then(() => {
-        authorsMessageDeleted = true;
-      })
-      .catch((err) => {
-        logger.error("Error deleting message", err);
-      });
-  }
-
-  const caption = authorsMessageDeleted ? `${user}: ${text}` : null;
+  const chatId = message.chat.id;
+  const isGroup = message.chat.type === "group" || message.chat.type === "supergroup";
+  // Ephemeral messages are shown only to this user and the bot. Sending one unprompted requires the bot to be a
+  // chat administrator, so this is cleared again as soon as Telegram refuses one.
+  let ephemeralReceiverId = isGroup && message.from && !message.from.is_bot ? message.from.id : undefined;
   let statusMessageId: number | undefined;
+  // Set once the author's message is deleted, so that the media and any later notice still carry the link.
+  let caption: string | null = null;
   const statusText = (status: string) =>
     [status, caption?.slice(0, 4096 - status.length - 2)].filter(Boolean).join("\n\n");
-  const replyOptions = {
+  const noticeOptions = {
     link_preview_options: { is_disabled: true },
     disable_notification: true,
     message_thread_id: message.message_thread_id,
-    reply_parameters: {
-      message_id: message.message_id,
-      allow_sending_without_reply: true,
-    },
   };
 
-  if (authorsMessageDeleted) {
+  const sendEphemeral = async (status: string): Promise<number | undefined> => {
+    if (ephemeralReceiverId === undefined) return undefined;
     try {
-      const status = await ctx.reply(statusText("Downloading… Your media will appear shortly."), replyOptions);
-      statusMessageId = status.message_id;
+      const sent = await ctx.reply(statusText(status), {
+        ...noticeOptions,
+        ephemeral_message_parameters: { receiver_user_id: ephemeralReceiverId },
+      });
+      if (sent.ephemeral_message_id === undefined) {
+        // A Bot API server older than 10.3 ignores the parameter and posts publicly; take that back.
+        ephemeralReceiverId = undefined;
+        await ctx.api.deleteMessage(chatId, sent.message_id).catch(() => {});
+        return undefined;
+      }
+      return sent.ephemeral_message_id;
     } catch (err) {
-      logger.error("Error posting download status", err);
+      logger.warn("Could not send an ephemeral message; the bot may not be a chat administrator", err);
+      ephemeralReceiverId = undefined;
+      return undefined;
     }
+  };
+
+  // The author's message stays in place until the media is ready, so a failed download never loses the link.
+  if (autoDeleteMessage) {
+    statusMessageId = await sendEphemeral("Downloading… Your media will appear shortly.");
   }
 
-  const updateStatus = async (status: string) => {
-    if (statusMessageId !== undefined) {
+  const reportFailure = async (status: string) => {
+    if (ephemeralReceiverId !== undefined && statusMessageId !== undefined) {
       try {
-        await ctx.api.editMessageText(message.chat.id, statusMessageId, statusText(status), {
+        await ctx.api.editEphemeralMessageText(chatId, ephemeralReceiverId, statusMessageId, statusText(status), {
           link_preview_options: { is_disabled: true },
         });
         return;
@@ -467,24 +474,42 @@ export async function downloadMediaFromMessage(
         logger.error("Error updating download status", err);
       }
     }
+    if ((await sendEphemeral(status)) !== undefined) return;
+    // Private chats, and groups where the bot cannot send ephemeral messages, get an ordinary reply.
     try {
-      await ctx.reply(statusText(status), replyOptions);
+      await ctx.reply(statusText(status), {
+        ...noticeOptions,
+        reply_parameters: { message_id: message.message_id, allow_sending_without_reply: true },
+      });
     } catch (err) {
-      logger.error("Error sending download status fallback", err);
+      logger.error("Error sending download failure notice", err);
     }
   };
 
   const downloads: MediaDownload[] = await downloadAllMedia(logger, urls).catch(async (err) => {
     logger.error("Error downloading media", err);
     if (err instanceof VideoDownloadError) {
-      await updateStatus(`Couldn't download media:\n\n${err.userMessage}`);
+      await reportFailure(`Couldn't download media:\n\n${err.userMessage}`);
       return [];
     }
-    await updateStatus("Couldn't download media. Please try again later.");
+    await reportFailure("Couldn't download media. Please try again later.");
     throw err;
   });
 
   if (downloads.length) {
+    let authorsMessageDeleted = false;
+    if (autoDeleteMessage) {
+      await ctx
+        .deleteMessage()
+        .then(() => {
+          authorsMessageDeleted = true;
+          caption = `${user}: ${text}`;
+        })
+        .catch((err) => {
+          logger.error("Error deleting message", err);
+        });
+    }
+
     const videos = downloads.filter((d): d is VideoDownload => d.type === "video");
     const galleries = downloads.filter((d): d is GalleryDownload => d.type === "gallery");
 
@@ -507,56 +532,41 @@ export async function downloadMediaFromMessage(
       ),
     );
     const batches = [videoMedia, ...galleryMedia].filter((batch) => batch.length);
-    const singleMedia = batches.length === 1 && batches[0].length === 1 ? batches[0][0] : undefined;
     const mediaOptions = {
       message_thread_id: message.message_thread_id,
-      // Do not reply to the temporary status, which will be deleted after delivery.
       reply_parameters: authorsMessageDeleted
         ? undefined
         : { message_id: message.message_id, allow_sending_without_reply: true },
     };
 
     try {
-      let replacedStatus = false;
-      if (statusMessageId !== undefined && singleMedia) {
-        try {
-          await ctx.api.editMessageMedia(message.chat.id, statusMessageId, singleMedia);
-          replacedStatus = true;
-        } catch (err) {
-          logger.error("Error replacing download status with media", err);
+      for (const batch of batches) {
+        if (batch.length === 1) {
+          const media = batch[0];
+          if (media.type === "video") {
+            await ctx.replyWithVideo(media.media, {
+              ...mediaOptions,
+              caption: media.caption,
+              cover: media.cover,
+              start_timestamp: media.start_timestamp,
+            });
+          } else {
+            await ctx.replyWithPhoto(media.media, { ...mediaOptions, caption: media.caption });
+          }
+        } else {
+          await ctx.replyWithMediaGroup(batch, mediaOptions);
         }
       }
-
-      if (!replacedStatus) {
-        for (const batch of batches) {
-          if (batch.length === 1) {
-            const media = batch[0];
-            if (media.type === "video") {
-              await ctx.replyWithVideo(media.media, {
-                ...mediaOptions,
-                caption: media.caption,
-                cover: media.cover,
-                start_timestamp: media.start_timestamp,
-              });
-            } else {
-              await ctx.replyWithPhoto(media.media, { ...mediaOptions, caption: media.caption });
-            }
-          } else {
-            await ctx.replyWithMediaGroup(batch, mediaOptions);
-          }
-        }
-        if (statusMessageId !== undefined) {
-          try {
-            await ctx.api.deleteMessage(message.chat.id, statusMessageId);
-          } catch (err) {
-            logger.error("Error deleting download status", err);
-            await updateStatus("Ready! Your media is below.");
-          }
+      if (ephemeralReceiverId !== undefined && statusMessageId !== undefined) {
+        try {
+          await ctx.api.deleteEphemeralMessage(chatId, ephemeralReceiverId, statusMessageId);
+        } catch (err) {
+          logger.error("Error deleting download status", err);
         }
       }
     } catch (err) {
       logger.error("Error sending media group", err);
-      await updateStatus("Couldn't send all media. Please try again later.");
+      await reportFailure("Couldn't send all media. Please try again later.");
     } finally {
       // Clean up downloaded files even if reporting a delivery error fails.
       for (const download of downloads) cleanupDownload(download);
