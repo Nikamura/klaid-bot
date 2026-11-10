@@ -35,6 +35,8 @@ pnpm tsx --test src/__tests__/bot.test.ts
 - **Entry point**: `src/index.ts` - starts the bot
 - **Bot setup**: `src/bot.ts` - grammY bot configuration and message handlers
 - **Video downloading**: `src/download-video.ts` - uses yt-dlp CLI to download videos
+- **Gallery downloading**: `src/download-gallery.ts` - gallery-dl fallback when yt-dlp finds no video
+- **Inline mode**: `src/handle-inline-query.ts` - placeholder result, then the media is edited in
 - **URL discovery**: `src/discover-urls.ts` - extracts URLs from message text using get-urls library
 - **Configuration**: `src/utils/config.ts` - environment variable parsing and validation
 - **Custom context**: `src/types/bot-context.ts` - extends grammY Context with logger and isPrivateChat
@@ -45,6 +47,8 @@ pnpm tsx --test src/__tests__/bot.test.ts
 - Tests use Node.js built-in test runner (`node:test`)
 - Biome for linting/formatting (120 char line width, spaces for indentation)
 - Winston for logging with child loggers per message
+- In groups the download status and failure notices are ephemeral messages (only the link's author sees them); this needs the bot to be a chat admin, otherwise failures fall back to a public reply
+- The author's message is deleted only after the download succeeds; media is sent with the yt-dlp thumbnail as `cover`
 
 ## Environment Variables
 

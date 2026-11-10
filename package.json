@@ -17,11 +17,11 @@
     "winston": "3.19.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.4",
-    "@tsconfig/node24": "24.0.4",
-    "@types/node": "24.13.3",
+    "@biomejs/biome": "2.6.6",
+    "@tsconfig/node24": "24.0.5",
+    "@types/node": "24.19.2",
     "c8": "12.0.0",
-    "tsx": "4.23.1",
+    "tsx": "4.23.15",
     "typescript": "7.0.2"
   },
   "packageManager": "pnpm@11.15.1"
