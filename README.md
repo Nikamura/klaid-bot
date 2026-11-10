@@ -53,6 +53,7 @@ or
 1. Add Telegram bot to your group chat.
 1. Send a command **/dl** (or **/download**) [URL] [URL] or a message with whitelisted domains.
 1. Receive the video or gallery!
+1. **optional** Set `KLAID_STORAGE_CHAT_ID` to a private channel or group the bot can post in. Inline downloads are uploaded there briefly, so inline mode also works for people who never started the bot.
 1. **optional** Make Bot user an _admin_ in your group chat for request message cleanup and for download status and failure notices that only the person who posted the link can see.
 
 ## Contributing 🤝

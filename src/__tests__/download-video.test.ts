@@ -70,6 +70,40 @@ describe("download-video", () => {
     });
   });
 
+  describe("formatVideoCaption", () => {
+    const meta = { title: '1 < 2 & "3"', thumbnail: null, duration: 95, uploader: "A&B" };
+
+    it("should escape markup and link the title to the source", async () => {
+      const { formatVideoCaption } = await import("../download-video.js");
+
+      assert.strictEqual(
+        formatVideoCaption("@user: <hi>", meta, "https://example.com/v?a=1&b=2"),
+        '@user: &lt;hi&gt;\n\n<a href="https://example.com/v?a=1&amp;b=2"><b>1 &lt; 2 &amp; &quot;3&quot;</b></a>\nA&amp;B \u2022 1:35',
+      );
+      assert.strictEqual(
+        formatVideoCaption(null, null, "https://example.com/v"),
+        '<a href="https://example.com/v">Source</a>',
+      );
+    });
+
+    it("should keep the visible text within the caption limit", async () => {
+      const { formatVideoCaption } = await import("../download-video.js");
+      const caption = formatVideoCaption(
+        "<".repeat(3000),
+        { ...meta, title: "t".repeat(500) },
+        "https://example.com/v",
+      );
+      const visible = caption
+        .replace(/<[^>]+>/g, "")
+        .replace(/&lt;/g, "<")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"');
+
+      assert.ok(visible.length <= 1024);
+      assert.ok(visible.length > 1000);
+    });
+  });
+
   describe("VideoDownloadError", () => {
     it("should create error with videoUrl and message", async () => {
       const { VideoDownloadError } = await import("../download-video.js");

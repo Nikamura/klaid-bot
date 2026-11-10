@@ -74,6 +74,8 @@ async function setup(
     const callback = args.at(-1) as (error: Error | null, stdout: string, stderr: string) => void;
     if (mode === "failure" || ((mode === "gallery" || mode === "photo") && executable !== "gallery-dl")) {
       callback(new Error("Source rejected download"), "", "Source rejected download");
+    } else if (executable === "ffprobe") {
+      callback(null, JSON.stringify({ streams: [{ width: 720, height: 1280 }], format: { duration: "600.2" } }), "");
     } else if (executable === "gallery-dl") {
       const directory = flags[flags.indexOf("-d") + 1];
       writeFileSync(join(directory, "1.jpg"), "photo");
@@ -100,7 +102,17 @@ async function setup(
   return { ctx, mocks, message, events, edits, videos, deletions, reply, run };
 }
 
-type VideoOptions = { caption?: string; cover?: unknown; start_timestamp?: number; reply_parameters?: unknown };
+type VideoOptions = {
+  caption?: string;
+  parse_mode?: string;
+  cover?: unknown;
+  start_timestamp?: number;
+  reply_parameters?: unknown;
+  width?: number;
+  height?: number;
+  duration?: number;
+  supports_streaming?: boolean;
+};
 
 it("shows the status only to the author and removes it once the video is delivered", async (t) => {
   const { run, events, videos, deletions, reply } = await setup(t);
@@ -210,7 +222,10 @@ it("takes back a status that an old Bot API server posted publicly", async (t) =
   const { run, ctx, message, events } = await setup(t);
   t.mock.method(ctx, "reply", async () => ({ ...message, message_id: 1000 }));
   await run();
-  assert.deepEqual(events, ["delete-public", "download", "download", "delete", "media"]);
+  assert.deepEqual(
+    events.filter((event) => event !== "download"),
+    ["delete-public", "delete", "media"],
+  );
 });
 
 it("sends a new private notice if the status can no longer be edited", async (t) => {
@@ -285,4 +300,26 @@ it("ignores a linked time beyond the end of the video", async (t) => {
   const { run, videos } = await setup(t, "video", "https://example.com/video?t=601");
   await run();
   assert.equal((videos[0][1] as VideoOptions).start_timestamp, undefined);
+});
+
+it("sends the real dimensions and a linked title with the video", async (t) => {
+  const { run, videos } = await setup(t);
+  await run();
+  const options = videos[0][1] as VideoOptions;
+  assert.deepEqual(
+    [options.width, options.height, options.duration, options.supports_streaming],
+    [720, 1280, 600, true],
+  );
+  assert.equal(options.parse_mode, "HTML");
+  assert.match(String(options.caption), /<a href="https:\/\/example.com\/video"><b>Test video<\/b><\/a>/);
+});
+
+it("shows a chat action while working and stops afterwards", async (t) => {
+  const { run, ctx } = await setup(t);
+  const action = t.mock.method(ctx, "replyWithChatAction", async () => true as const);
+  await run(false);
+  assert.equal(action.mock.calls[0].arguments[0], "upload_video");
+  const calls = action.mock.callCount();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(action.mock.callCount(), calls);
 });

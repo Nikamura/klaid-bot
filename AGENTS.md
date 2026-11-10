@@ -58,6 +58,7 @@ pnpm tsx --test src/__tests__/bot.test.ts
 - `KLAID_AUTO_DL_URLS` - JSON array of URL patterns for auto-download (defaults: tiktok.com, youtube.com/shorts/, instagram.com/reel/)
 - `KLAID_AUTO_DL_DELETE_MESSAGE` - whether to delete original message after download (default: true)
 - `KLAID_TELEGRAM_API_ROOT` - optional custom Telegram API server
+- `KLAID_STORAGE_CHAT_ID` - optional chat the bot can post in; inline downloads are uploaded there to get a file_id instead of to the user's private chat
 
 ## Docker
 

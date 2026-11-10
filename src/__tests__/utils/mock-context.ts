@@ -77,6 +77,7 @@ export function createMockContext(options: MockContextOptions = {}): MockContext
     replyWithMediaGroup: replyWithMediaGroupMock.fn,
     replyWithPhoto: replyWithPhotoMock.fn,
     deleteMessage: deleteMessageMock.fn,
+    replyWithChatAction: () => Promise.resolve(true),
   } as unknown as BotContext;
 
   return {

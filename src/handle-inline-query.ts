@@ -1,28 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { InlineKeyboard, InputFile, InputMediaBuilder } from "grammy";
+import { GrammyError, InlineKeyboard, InputFile, InputMediaBuilder } from "grammy";
 import { discoverUrls } from "./discover-urls.js";
 import {
   cleanupDownload,
   downloadMedia,
+  escapeHtml,
   fetchVideoMeta,
+  formatVideoCaption,
   type MediaDownload,
-  type VideoMeta,
+  VideoDownloadError,
 } from "./download-video.js";
 import type { BotContext } from "./types/bot-context.js";
+import { config } from "./utils/config.js";
 
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function formatMeta(meta: VideoMeta, url: string): string {
-  const parts = [
-    `<b>${meta.title}</b>`,
-    [meta.uploader, meta.duration ? formatDuration(meta.duration) : null].filter(Boolean).join(" \u2022 "),
-    `<a href="${url}">Source</a>`,
-  ];
-  return parts.filter(Boolean).join("\n");
+function sourceLink(url: string, label = url): string {
+  return `<a href="${escapeHtml(url)}">${escapeHtml(label)}</a>`;
 }
 
 export async function handleInlineQuery(ctx: BotContext) {
@@ -49,7 +41,7 @@ export async function handleInlineQuery(ctx: BotContext) {
         description: url,
         thumbnail_url: "https://img.icons8.com/color/480/video.png",
         input_message_content: {
-          message_text: `\u23F3 Downloading media...\n<a href="${url}">${url}</a>`,
+          message_text: `\u23F3 Downloading media...\n${sourceLink(url)}`,
           parse_mode: "HTML" as const,
         },
         reply_markup: new InlineKeyboard().text("\u23F3 Downloading...", "noop"),
@@ -76,24 +68,43 @@ export async function handleChosenInlineResult(ctx: BotContext) {
   if (!urls.length) return;
 
   const url = urls[0];
+  const userId = chosenResult.from.id;
+  // Inline messages cannot take uploads, so the file goes to another chat first to obtain a file_id. Without a
+  // storage chat that is the user's private chat, which only works once they have started the bot.
+  const uploadChatId = config.KLAID_STORAGE_CHAT_ID ?? userId;
+  const showFailure = async (html: string, keyboard?: InlineKeyboard) => {
+    try {
+      await ctx.api.editMessageTextInline(inlineMessageId, html, {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup: keyboard ?? { inline_keyboard: [] },
+      });
+    } catch {
+      // Edit may fail if message was deleted
+    }
+  };
   let download: MediaDownload | null = null;
 
   try {
-    // Fetch metadata and download media in parallel
     const metaPromise = fetchVideoMeta(url).catch((err) => {
       ctx.logger.debug("Failed to fetch metadata", err);
       return null;
     });
-    const downloadPromise = downloadMedia(ctx.logger, url, 0);
+    const downloadPromise = downloadMedia(ctx.logger, url, 0, metaPromise);
 
     // Update message with metadata as soon as it arrives
     metaPromise.then(async (meta) => {
       if (!meta) return;
       try {
-        await ctx.api.editMessageTextInline(inlineMessageId, `\u23F3 Downloading media...\n${formatMeta(meta, url)}`, {
-          parse_mode: "HTML",
-          reply_markup: new InlineKeyboard().text("\u23F3 Downloading...", "noop"),
-        });
+        await ctx.api.editMessageTextInline(
+          inlineMessageId,
+          `\u23F3 Downloading media...\n${formatVideoCaption(null, meta, url)}`,
+          {
+            parse_mode: "HTML",
+            link_preview_options: { is_disabled: true },
+            reply_markup: new InlineKeyboard().text("\u23F3 Downloading...", "noop"),
+          },
+        );
       } catch {
         // Edit may fail if media already replaced the message
       }
@@ -101,28 +112,25 @@ export async function handleChosenInlineResult(ctx: BotContext) {
 
     download = await downloadPromise;
 
-    const userId = chosenResult.from.id;
-    const meta = await metaPromise;
-
     if (download.type === "video") {
-      const tempMessage = await ctx.api.sendVideo(userId, new InputFile(download.videoPath), {
+      const tempMessage = await ctx.api.sendVideo(uploadChatId, new InputFile(download.videoPath), {
         cover: download.coverPath ? new InputFile(download.coverPath) : undefined,
+        width: download.width,
+        height: download.height,
+        duration: download.duration,
+        supports_streaming: true,
+        disable_notification: true,
       });
       const fileId = tempMessage.video?.file_id;
 
       if (!fileId) {
-        await ctx.api.editMessageTextInline(
-          inlineMessageId,
-          `\u274C Failed to process video\n<a href="${url}">${url}</a>`,
-          { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
-        );
+        await showFailure(`\u274C Failed to process video\n${sourceLink(url)}`);
         return;
       }
 
-      const caption = meta ? formatMeta(meta, url) : `<a href="${url}">Source</a>`;
-      // Inline messages cannot take uploads, so reuse the cover Telegram stored with the temporary message.
+      // Reuse the cover Telegram stored with the temporary message.
       const media = InputMediaBuilder.video(fileId, {
-        caption,
+        caption: formatVideoCaption(null, download.meta, url),
         parse_mode: "HTML",
         cover: tempMessage.video?.cover?.at(-1)?.file_id,
         start_timestamp: download.startTimestamp,
@@ -131,44 +139,45 @@ export async function handleChosenInlineResult(ctx: BotContext) {
         reply_markup: { inline_keyboard: [] },
       });
 
-      await ctx.api.deleteMessage(userId, tempMessage.message_id).catch(() => {});
+      await ctx.api.deleteMessage(uploadChatId, tempMessage.message_id).catch(() => {});
     } else {
-      // Gallery: send first photo to get file_id, then edit inline message
+      // An inline message holds a single item, so only the first photo can be shown.
       const firstPhoto = download.filePaths[0];
-      const tempMessage = await ctx.api.sendPhoto(userId, new InputFile(firstPhoto));
+      const tempMessage = await ctx.api.sendPhoto(uploadChatId, new InputFile(firstPhoto), {
+        disable_notification: true,
+      });
       const fileId = tempMessage.photo?.[tempMessage.photo.length - 1]?.file_id;
 
       if (!fileId) {
-        await ctx.api.editMessageTextInline(
-          inlineMessageId,
-          `\u274C Failed to process gallery\n<a href="${url}">${url}</a>`,
-          { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
-        );
+        await showFailure(`\u274C Failed to process gallery\n${sourceLink(url)}`);
         return;
       }
 
-      const caption = `<a href="${url}">Source</a> (${download.filePaths.length} image${
-        download.filePaths.length > 1 ? "s" : ""
-      })`;
+      const count = download.filePaths.length;
+      const caption =
+        count > 1
+          ? `Photo 1 of ${count} \u2022 ${sourceLink(url, "see the rest at the source")}`
+          : sourceLink(url, "Source");
       const media = InputMediaBuilder.photo(fileId, { caption, parse_mode: "HTML" });
       await ctx.api.editMessageMediaInline(inlineMessageId, media, {
         reply_markup: { inline_keyboard: [] },
       });
 
-      await ctx.api.deleteMessage(userId, tempMessage.message_id).catch(() => {});
+      await ctx.api.deleteMessage(uploadChatId, tempMessage.message_id).catch(() => {});
     }
   } catch (err) {
     ctx.logger.error("Inline download failed", err);
-    const errorMsg = err instanceof Error ? err.message : "Unknown error";
-    try {
-      await ctx.api.editMessageTextInline(
-        inlineMessageId,
-        `\u274C Download failed\n<a href="${url}">${url}</a>\n\n<i>${errorMsg}</i>`,
-        { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } },
+    if (download && uploadChatId === userId && err instanceof GrammyError && err.error_code === 403) {
+      await showFailure(
+        `\u274C I can't send you files yet\n${sourceLink(url)}\n\n<i>Open the bot, press Start, then try again.</i>`,
+        new InlineKeyboard().url("Open the bot", `https://t.me/${ctx.me.username}`),
       );
-    } catch {
-      // Edit may fail if message was deleted
+      return;
     }
+    // Downloader output is logged, not shown: it is noisy and can contain arbitrary markup.
+    const reason =
+      err instanceof VideoDownloadError ? err.userMessage : "Something went wrong. Please try again later.";
+    await showFailure(`\u274C Download failed\n${sourceLink(url)}\n\n<i>${escapeHtml(reason)}</i>`);
   } finally {
     if (download) {
       cleanupDownload(download);

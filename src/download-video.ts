@@ -252,6 +252,48 @@ async function dowloadVideo(fileName: string, videoUrl: string): Promise<string>
   }
 }
 
+interface VideoProbe {
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
+/** Reads the real dimensions and length of the downloaded file, so Telegram can lay the video out before it loads. */
+async function probeVideo(videoPath: string): Promise<VideoProbe> {
+  try {
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(
+        "ffprobe",
+        [
+          "-v",
+          "error",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=width,height:stream_side_data=rotation:format=duration",
+          "-of",
+          "json",
+          videoPath,
+        ],
+        { timeout: 10_000 },
+        (error, out) => (error ? reject(error) : resolve(out)),
+      );
+    });
+    const data = JSON.parse(stdout);
+    const stream = data.streams?.[0];
+    const rotation = Math.abs(Number(stream?.side_data_list?.[0]?.rotation ?? 0));
+    const sideways = rotation === 90 || rotation === 270;
+    const duration = Number(data.format?.duration);
+    return {
+      width: (sideways ? stream?.height : stream?.width) || undefined,
+      height: (sideways ? stream?.width : stream?.height) || undefined,
+      duration: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 function findCoverFile(fileName: string): string | null {
   const coverPath = `${config.KLAID_DOWNLOAD_DIR}/${fileName}.jpg`;
   return existsSync(coverPath) ? coverPath : null;
@@ -306,8 +348,9 @@ export async function fetchVideoMeta(videoUrl: string, timeoutMs = 10_000): Prom
   }
 }
 
-export interface VideoDownload {
+export interface VideoDownload extends VideoProbe {
   type: "video";
+  url: string;
   videoPath: string;
   /** JPEG thumbnail saved by yt-dlp, sent as the video cover. */
   coverPath: string | null;
@@ -334,16 +377,23 @@ export interface GalleryDownload {
 
 export type MediaDownload = VideoDownload | GalleryDownload;
 
-export async function downloadMedia(logger: typeof globalLogger, url: string, index: number): Promise<MediaDownload> {
+export async function downloadMedia(
+  logger: typeof globalLogger,
+  url: string,
+  index: number,
+  metaPromise: Promise<VideoMeta | null> = fetchVideoMeta(url).catch(() => null),
+): Promise<MediaDownload> {
   const fileName = `${Date.now()}-${index}`;
 
   try {
     logger.debug("Trying video download", { url });
-    const [videoPath, meta] = await Promise.all([dowloadVideo(fileName, url), fetchVideoMeta(url).catch(() => null)]);
+    const [videoPath, meta] = await Promise.all([dowloadVideo(fileName, url), metaPromise]);
+    const probe = await probeVideo(videoPath);
     // `t` is not a start time on every site, so only trust it when it falls inside the known duration.
     const start = parseStartTimestamp(url);
-    const startTimestamp = start && meta?.duration && start < meta.duration ? start : undefined;
-    return { type: "video", videoPath, coverPath: findCoverFile(fileName), startTimestamp, meta };
+    const duration = probe.duration ?? meta?.duration;
+    const startTimestamp = start && duration && start < duration ? start : undefined;
+    return { type: "video", url, videoPath, coverPath: findCoverFile(fileName), startTimestamp, meta, ...probe };
   } catch (videoErr) {
     if (!(videoErr instanceof VideoDownloadError)) throw videoErr;
 
@@ -392,12 +442,41 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function formatMeta(meta: VideoMeta): string {
-  const parts = [
-    meta.title,
-    [meta.uploader, meta.duration ? formatDuration(meta.duration) : null].filter(Boolean).join(" \u2022 "),
-  ];
-  return parts.filter(Boolean).join("\n");
+export function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+const TELEGRAM_CAPTION_LIMIT = 1024;
+
+/**
+ * Builds an HTML caption: an optional plain-text prefix, then the title linked to the source and the uploader and
+ * length. Everything is cut before escaping, so the result stays within Telegram's limit without breaking a tag.
+ */
+export function formatVideoCaption(prefix: string | null, meta: VideoMeta | null, url: string): string {
+  const title = meta ? meta.title.slice(0, 200) : "Source";
+  const details = meta
+    ? [meta.uploader, meta.duration ? formatDuration(meta.duration) : null]
+        .filter(Boolean)
+        .join(" \u2022 ")
+        .slice(0, 100)
+    : "";
+  const label = meta ? `<b>${escapeHtml(title)}</b>` : title;
+  const metaLines = [`<a href="${escapeHtml(url)}">${label}</a>`, escapeHtml(details)].filter(Boolean).join("\n");
+  const prefixBudget = TELEGRAM_CAPTION_LIMIT - title.length - details.length - 3;
+  return [prefix ? escapeHtml(prefix.slice(0, prefixBudget)) : null, metaLines].filter(Boolean).join("\n\n");
+}
+
+/** Shows "sending a video…" under the chat title until stopped; Telegram clears the action after five seconds. */
+function startChatAction(ctx: BotContext, messageThreadId: number | undefined): () => void {
+  const send = () => {
+    Promise.resolve()
+      .then(() => ctx.replyWithChatAction("upload_video", { message_thread_id: messageThreadId }))
+      .catch(() => {});
+  };
+  send();
+  const timer = setInterval(send, 4500);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 async function downloadAllMedia(logger: typeof globalLogger, urls: string[]): Promise<MediaDownload[]> {
@@ -486,91 +565,102 @@ export async function downloadMediaFromMessage(
     }
   };
 
-  const downloads: MediaDownload[] = await downloadAllMedia(logger, urls).catch(async (err) => {
-    logger.error("Error downloading media", err);
-    if (err instanceof VideoDownloadError) {
-      await reportFailure(`Couldn't download media:\n\n${err.userMessage}`);
-      return [];
-    }
-    await reportFailure("Couldn't download media. Please try again later.");
-    throw err;
-  });
+  const stopChatAction = startChatAction(ctx, message.message_thread_id);
+  try {
+    const downloads: MediaDownload[] = await downloadAllMedia(logger, urls).catch(async (err) => {
+      logger.error("Error downloading media", err);
+      if (err instanceof VideoDownloadError) {
+        await reportFailure(`Couldn't download media:\n\n${err.userMessage}`);
+        return [];
+      }
+      await reportFailure("Couldn't download media. Please try again later.");
+      throw err;
+    });
 
-  if (downloads.length) {
-    let authorsMessageDeleted = false;
-    if (autoDeleteMessage) {
-      await ctx
-        .deleteMessage()
-        .then(() => {
-          authorsMessageDeleted = true;
-          caption = `${user}: ${text}`;
-        })
-        .catch((err) => {
-          logger.error("Error deleting message", err);
-        });
-    }
+    if (downloads.length) {
+      let authorsMessageDeleted = false;
+      if (autoDeleteMessage) {
+        await ctx
+          .deleteMessage()
+          .then(() => {
+            authorsMessageDeleted = true;
+            caption = `${user}: ${text}`;
+          })
+          .catch((err) => {
+            logger.error("Error deleting message", err);
+          });
+      }
 
-    const videos = downloads.filter((d): d is VideoDownload => d.type === "video");
-    const galleries = downloads.filter((d): d is GalleryDownload => d.type === "gallery");
+      const videos = downloads.filter((d): d is VideoDownload => d.type === "video");
+      const galleries = downloads.filter((d): d is GalleryDownload => d.type === "gallery");
 
-    const videoMedia = videos.map((download, i) =>
-      InputMediaBuilder.video(new InputFile(download.videoPath), {
-        cover: download.coverPath ? new InputFile(download.coverPath) : undefined,
-        start_timestamp: download.startTimestamp,
-        caption:
-          [i === 0 ? caption : null, download.meta ? formatMeta(download.meta) : null]
-            .filter(Boolean)
-            .join("\n\n")
-            .slice(0, 1024) || undefined,
-      }),
-    );
-    const galleryMedia = galleries.map((gallery, galleryIndex) =>
-      gallery.filePaths.map((filePath, i) =>
-        InputMediaBuilder.photo(new InputFile(filePath), {
-          caption: !videos.length && galleryIndex === 0 && i === 0 ? caption?.slice(0, 1024) : undefined,
+      const videoMedia = videos.map((download, i) =>
+        InputMediaBuilder.video(new InputFile(download.videoPath), {
+          cover: download.coverPath ? new InputFile(download.coverPath) : undefined,
+          start_timestamp: download.startTimestamp,
+          caption: formatVideoCaption(i === 0 ? caption : null, download.meta, download.url),
+          parse_mode: "HTML",
+          width: download.width,
+          height: download.height,
+          duration: download.duration,
+          supports_streaming: true,
         }),
-      ),
-    );
-    const batches = [videoMedia, ...galleryMedia].filter((batch) => batch.length);
-    const mediaOptions = {
-      message_thread_id: message.message_thread_id,
-      reply_parameters: authorsMessageDeleted
-        ? undefined
-        : { message_id: message.message_id, allow_sending_without_reply: true },
-    };
+      );
+      const galleryMedia = galleries.map((gallery, galleryIndex) =>
+        gallery.filePaths.map((filePath, i) =>
+          InputMediaBuilder.photo(new InputFile(filePath), {
+            caption: !videos.length && galleryIndex === 0 && i === 0 ? caption?.slice(0, 1024) : undefined,
+          }),
+        ),
+      );
+      const batches = [videoMedia, ...galleryMedia].filter((batch) => batch.length);
+      const mediaOptions = {
+        message_thread_id: message.message_thread_id,
+        reply_parameters: authorsMessageDeleted
+          ? undefined
+          : { message_id: message.message_id, allow_sending_without_reply: true },
+      };
 
-    try {
-      for (const batch of batches) {
-        if (batch.length === 1) {
-          const media = batch[0];
-          if (media.type === "video") {
-            await ctx.replyWithVideo(media.media, {
-              ...mediaOptions,
-              caption: media.caption,
-              cover: media.cover,
-              start_timestamp: media.start_timestamp,
-            });
+      try {
+        for (const batch of batches) {
+          if (batch.length === 1) {
+            const media = batch[0];
+            if (media.type === "video") {
+              await ctx.replyWithVideo(media.media, {
+                ...mediaOptions,
+                caption: media.caption,
+                parse_mode: media.parse_mode,
+                cover: media.cover,
+                start_timestamp: media.start_timestamp,
+                width: media.width,
+                height: media.height,
+                duration: media.duration,
+                supports_streaming: media.supports_streaming,
+              });
+            } else {
+              await ctx.replyWithPhoto(media.media, { ...mediaOptions, caption: media.caption });
+            }
           } else {
-            await ctx.replyWithPhoto(media.media, { ...mediaOptions, caption: media.caption });
+            await ctx.replyWithMediaGroup(batch, mediaOptions);
           }
-        } else {
-          await ctx.replyWithMediaGroup(batch, mediaOptions);
         }
-      }
-      if (ephemeralReceiverId !== undefined && statusMessageId !== undefined) {
-        try {
-          await ctx.api.deleteEphemeralMessage(chatId, ephemeralReceiverId, statusMessageId);
-        } catch (err) {
-          logger.error("Error deleting download status", err);
+        if (ephemeralReceiverId !== undefined && statusMessageId !== undefined) {
+          try {
+            await ctx.api.deleteEphemeralMessage(chatId, ephemeralReceiverId, statusMessageId);
+          } catch (err) {
+            logger.error("Error deleting download status", err);
+          }
         }
+      } catch (err) {
+        logger.error("Error sending media group", err);
+        await reportFailure("Couldn't send all media. Please try again later.");
+      } finally {
+        // Clean up downloaded files even if reporting a delivery error fails.
+        for (const download of downloads) cleanupDownload(download);
       }
-    } catch (err) {
-      logger.error("Error sending media group", err);
-      await reportFailure("Couldn't send all media. Please try again later.");
-    } finally {
-      // Clean up downloaded files even if reporting a delivery error fails.
-      for (const download of downloads) cleanupDownload(download);
     }
+  } finally {
+    stopChatAction();
   }
 
   logger.debug("Finished downloading media", {

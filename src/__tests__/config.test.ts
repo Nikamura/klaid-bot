@@ -183,5 +183,17 @@ describe("config", () => {
       const config = await importConfig();
       assert.strictEqual(config.KLAID_TIKTOK_YT_DLP, "/opt/yt-dlp-plain/bin/yt-dlp");
     });
+
+    it("should have no storage chat by default", async () => {
+      process.env.KLAID_STORAGE_CHAT_ID = "not-a-number";
+      const config = await importConfig();
+      assert.strictEqual(config.KLAID_STORAGE_CHAT_ID, undefined);
+    });
+
+    it("should parse a configured storage chat", async () => {
+      process.env.KLAID_STORAGE_CHAT_ID = "-1001234567890";
+      const config = await importConfig();
+      assert.strictEqual(config.KLAID_STORAGE_CHAT_ID, -1001234567890);
+    });
   });
 });

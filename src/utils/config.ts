@@ -9,6 +9,7 @@ interface ConfigSchema {
   KLAID_AUTO_DL_DELETE_MESSAGE: boolean;
   KLAID_TELEGRAM_API_ROOT: string;
   KLAID_TIKTOK_YT_DLP: string;
+  KLAID_STORAGE_CHAT_ID: number | undefined;
 }
 
 class Config {
@@ -36,6 +37,7 @@ class Config {
       KLAID_AUTO_DL_DELETE_MESSAGE: this.parseBooleanValue(process.env.KLAID_AUTO_DL_DELETE_MESSAGE, true),
       KLAID_TELEGRAM_API_ROOT: process.env.KLAID_TELEGRAM_API_ROOT || "",
       KLAID_TIKTOK_YT_DLP: process.env.KLAID_TIKTOK_YT_DLP || "yt-dlp",
+      KLAID_STORAGE_CHAT_ID: this.parseIntegerValue(process.env.KLAID_STORAGE_CHAT_ID),
     };
   }
 
@@ -53,6 +55,11 @@ class Config {
     } catch {
       return defaultValue;
     }
+  }
+
+  private parseIntegerValue(value: string | undefined): number | undefined {
+    const parsed = Number(value);
+    return value && Number.isSafeInteger(parsed) ? parsed : undefined;
   }
 
   private parseBooleanValue(value: string | undefined, defaultValue: boolean): boolean {
